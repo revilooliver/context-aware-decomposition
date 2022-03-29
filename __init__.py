@@ -1,1 +1,1 @@
-from .gate_variants import *
+from gate_variants import *

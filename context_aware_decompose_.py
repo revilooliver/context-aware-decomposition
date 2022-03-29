@@ -1,0 +1,350 @@
+# This code is part of Qiskit.
+#
+# (C) Copyright IBM 2017, 2018.
+#
+# This code is licensed under the Apache License, Version 2.0. You may
+# obtain a copy of this license in the LICENSE.txt file in the root directory
+# of this source tree or at http://www.apache.org/licenses/LICENSE-2.0.
+#
+# Any modifications or derivative works of this code must retain this
+# copyright notice, and modified files need to carry a notice indicating
+# that they have been altered from the originals.
+
+"""Recursively expands 3q+ gates until the circuit only contains 2q or 1q gates."""
+
+from qiskit.transpiler.basepasses import TransformationPass
+from qiskit.exceptions import QiskitError
+from qiskit.converters.circuit_to_dag import circuit_to_dag
+from qiskit.converters import dag_to_circuit
+from qiskit import QuantumCircuit
+from qiskit.transpiler.layout import Layout
+from qiskit.dagcircuit import DAGCircuit
+from qiskit.circuit import QuantumRegister
+
+from gate_variants.toffoli_variants import CCX_Variant_Gate
+import qiskit_superstaq
+
+
+class UnrollToffoliContextAware_(TransformationPass):
+    """Recursively expands all toffoli gates until the circuit only contains 2q or 1q gates."""
+
+    def __init__(self, coupling_map):
+        '''
+        Initialize the UnrollToffoli pass. This pass does a layout aware decomposition of the toffoli
+        gate. If all three qubits of the toffoli are mapped to each other, we do a 6 qubit decomposition
+        else we do an eight qubit decomposition.
+
+        Args:
+            coupling_map(CouplingMap) : directed graph representing a coupling map
+        '''
+        super().__init__()
+        self.coupling_map = coupling_map
+
+    def run(self, dag):
+        """Run the UnrollToffoli_ pass on `dag`.
+
+        Args:
+            dag(DAGCircuit): input dag
+        Returns:
+            DAGCircuit: output dag with maximum node degrees of 2
+        Raises:
+            QiskitError: if a 3q+ gate is not decomposable
+        """
+        for node in dag.multi_qubit_ops():
+
+            assert node.op.name == 'ccx'
+
+            if dag.has_calibration_for(node):
+                continue
+            
+            # substitute the toffoli gate with its 6/8 qubit decomposition based on the layout
+            #The layout has been applied to the dag. So we do not need that information
+            canonical_register = dag.qregs["q"]
+            trivial_layout = Layout.generate_trivial_layout(canonical_register)
+            current_layout = trivial_layout.copy()
+            
+            #converting the datatype 'qubit' to the datatype 'int'
+            physical_q0 = current_layout[node.qargs[0]]
+            physical_q1 = current_layout[node.qargs[1]]
+            physical_q2 = current_layout[node.qargs[2]]
+
+            print('The arguments for the toffoli node are: ', node.qargs[0], node.qargs[1], node.qargs[2])
+            print('The distances between the toffoli qubits are: ', self.coupling_map.distance(physical_q0, physical_q1), 'between qubits 0 and 1')
+            print('The distances between the toffoli qubits are: ', self.coupling_map.distance(physical_q1, physical_q2), 'between qubits 1 and 2')
+            print('The distances between the toffoli qubits are: ', self.coupling_map.distance(physical_q0, physical_q2), 'between qubits 0 and 2')
+
+            #now compute the distances
+            bool1 = self.coupling_map.distance(physical_q0, physical_q1) == 1
+            bool2 = self.coupling_map.distance(physical_q1, physical_q2) == 1
+            bool3 = self.coupling_map.distance(physical_q0, physical_q2) == 1
+
+            #if all qubits are adjacent to each other
+            if bool1 and bool2 and bool3:
+
+
+                print('The physical qubits for the toffoli are: ', physical_q0, physical_q1, physical_q2)
+                print('The required toffoli will be decomposed using a 6 cnot decomposition')
+
+                #create a 6 cnot circuit
+                
+                predecessors = list(dag.quantum_predecessors(node))
+                successors = list(dag.quantum_successors(node))
+                blocks = self.property_set["block_list"]
+                for block in blocks:
+                    string = ""
+                    for np in block:
+                        string = string + np.name + ","
+                    print(string)
+                #the variant_tag specifies the gate decomposition. ['predecessor', 'successor', 'linear/fullyconnected', 'heavy on predecessor/successor'] First, check all the predecessors and specify the first tag based on the predecessors. Then traverse the successors and specify the second tag 'successor'. The 'linear/fullyconnected' are specified based on the physical qubit connectivity. The last tag 'heavy' is specified while checking both predecessor. The tags are based on the order of the first CNOT gate. For example, '01' means the first cnot gate's control qubit is 0 and target qubit is 1. The initial value is '00'.
+                variant_tag=['00','00','f','p']
+                for predecessor in predecessors:
+                    print("predecessor", predecessor.name)
+                    if predecessor.name in {'ccx', 'ccx_variant'}:
+                        #check the number of common wires
+                        print("pre qargs", type(predecessor.qargs), predecessor.qargs)
+                        print("node qargs", node.qargs)
+                        intersect = [value for value in node.qargs if value in predecessor.qargs]
+                        print("intersect", intersect)
+#                         print("intermediate_node1", dag.next_node_on_wire(node=predecessor, wire = predecessor.qargs[0]).name)
+#                         print("intermediate_node2", dag.next_node_on_wire(node=predecessor, wire = predecessor.qargs[1]).name)
+#                         print("intermediate_node3", dag.next_node_on_wire(node=predecessor, wire = predecessor.qargs[2]).name)
+                        # check length
+                        if len(intersect) == 2:
+                            cond1 = dag.next_node_on_wire(node=predecessor, wire = intersect[0]) is node
+                            cond2 = dag.next_node_on_wire(node=predecessor, wire = intersect[1]) is node
+                            print("two intersection conditions", cond1, cond2)
+                            #make sure there is no gate between the intersection qargs.
+                            if cond1 and cond2:
+                                variant_tag[0] = str(node.qargs.index(intersect[0])) + str(node.qargs.index(intersect[1]))
+                                #set the tag to 'p' since it can be cancelled with the predecessor
+                                variant_tag[-1] = 'p'
+                            print(variant_tag)
+                            break
+                        elif len(intersect) == 3:
+                            #make sure there is only one gate in between
+                            cond1 = dag.next_node_on_wire(node=predecessor, wire = intersect[0]) is node
+                            cond2 = dag.next_node_on_wire(node=predecessor, wire = intersect[1]) is node
+                            cond3 = dag.next_node_on_wire(node=predecessor, wire = intersect[2]) is node
+                            print("three intersection conditions", cond1, cond2, cond3)
+                            if cond1 is True:
+                                if cond2 is True:
+                                    #All true TTT or first two conditions are true: TTF
+                                    variant_tag[0] = str(node.qargs.index(intersect[0])) + str(node.qargs.index(intersect[1]))
+                                    #set the tag to 'p' since it can be cancelled with the predecessor
+                                    variant_tag[-1] = 'p'
+                                    break
+                                else:
+                                    #TFT
+                                    if cond3 is True:
+                                        variant_tag[0] = str(node.qargs.index(intersect[0])) + str(node.qargs.index(intersect[2]))
+                                        #set the tag to 'p' since it can be cancelled with the predecessor
+                                        variant_tag[-1] = 'p'
+                                        break
+                            else:
+                                #FTT
+                                if cond2 is True and cond3 is True:
+                                    variant_tag[0] = str(node.qargs.index(intersect[1])) + str(node.qargs.index(intersect[2]))
+                                    #set the tag to 'p' since it can be cancelled with the predecessor
+                                    variant_tag[-1] = 'p'
+                                    break
+                            print(variant_tag)
+                            break
+                    if predecessor.name == 'cx':
+                        #test the cx condition
+                        cond1 = dag.next_node_on_wire(node=predecessor, wire = predecessor.qargs[0]) is node
+                        cond2 = dag.next_node_on_wire(node=predecessor, wire = predecessor.qargs[1]) is node
+                        if cond1 and cond2:
+                            #Makesure the CX is the exact predecessor(no gates in between)
+                            index_str = UnrollToffoliContextAware_.check_order(node, predecessor)
+                            print(index_str)
+                            variant_tag[0] = index_str
+                            variant_tag[2] = 'p'
+                            break
+                for successor in successors:
+                    print("successor", successor.name)
+                    #Makesure the CX is the exact successor(no gates in between)
+                    if successor.name == 'cx' and len(list(dag.quantum_predecessors(successor))) == 1:
+                        index_str = UnrollToffoliContextAware_.check_order(node, successor)
+                        print(index_str)
+                        variant_tag[1] = index_str
+                        variant_tag[2] = 's'
+                #JLTODO: need to consider the two-qubit block and also include the consideration of CX direction.
+                variant_dag = UnrollToffoliContextAware_.get_Toffoli_variant_dag(CCX_Variant_Gate, variant_tag=tuple(variant_tag))
+                dag.substitute_node_with_dag(node, variant_dag)
+
+            #if physical qubit 1 is connected to both but zero and two are not connected
+            elif bool1 and bool2 and (not bool3):
+
+                print('The physical qubits for the toffoli are: ', physical_q0, physical_q1, physical_q2)
+                print('The required toffoli will be decomposed using an 8 cnot decomposition - one in center')
+
+#                 #create an 8 cnot circuit
+#                 circuit = QuantumCircuit(3)
+#                 circuit.h(2)
+#                 circuit.t([0, 1, 2])
+#                 circuit.cx(0, 1)
+#                 circuit.cx(1, 2)
+#                 circuit.cx(0, 1)
+#                 circuit.t(2)
+#                 circuit.cx(1, 2)
+#                 circuit.cx(0, 1)
+#                 circuit.tdg([1, 2])
+#                 circuit.cx(1, 2)
+#                 circuit.cx(0, 1)
+#                 circuit.tdg(2)
+#                 circuit.cx(1, 2)
+#                 circuit.h(2)
+
+#                 dag_8c_toffoli = circuit_to_dag(circuit)
+#                 dag.substitute_node_with_dag(node, dag_8c_toffoli)
+                variant_dag = UnrollToffoliContextAware_.get_Toffoli_variant_dag(CCX_Variant_Gate, variant_tag = ('01', '12', 'l', 'p'), index_order = [0,1,2])
+                dag.substitute_node_with_dag(node, variant_dag)
+
+            #if physical qubit 0 is connected to both but one and two are not connected
+            elif bool1 and (not bool2) and bool3:
+
+                print('The physical qubits for the toffoli are: ', physical_q0, physical_q1, physical_q2)
+                print('The required toffoli will be decomposed using an 8 cnot decomposition - zero in center')
+
+#                 #create an 8 cnot circuit
+#                 circuit = QuantumCircuit(3)
+
+#                 circuit.h(2)
+#                 circuit.t([0, 1, 2])
+#                 circuit.cx(0, 1)
+#                 circuit.cx(1, 2)
+#                 circuit.cx(0, 1)
+#                 circuit.t(2)
+#                 circuit.cx(1, 2)
+#                 circuit.cx(0, 1)
+#                 circuit.tdg([1, 2])
+#                 circuit.cx(1, 2)
+#                 circuit.cx(0, 1)
+#                 circuit.tdg(2)
+#                 circuit.cx(1, 2)
+#                 circuit.h(2)
+
+#                 dag_8c_toffoli = circuit_to_dag(circuit)
+#                 dag.substitute_node_with_dag(node, dag_8c_toffoli)
+                variant_dag = UnrollToffoliContextAware_.get_Toffoli_variant_dag(CCX_Variant_Gate, variant_tag = ('01', '12', 'l', 'p'), index_order = [1,0,2])
+                dag.substitute_node_with_dag(node, variant_dag)
+
+            #if physical qubit 2 is connected to both but 0 and 1 are not connected
+            elif (not bool1) and bool2 and bool3:
+
+                print('The physical qubits for the toffoli are: ', physical_q0, physical_q1, physical_q2)
+                print('The required toffoli will be decomposed using an 8 cnot decomposition - two in center')
+
+#                 #create a 8 cnot circuit
+#                 circuit = QuantumCircuit(3)
+
+#                 circuit.h(1)
+#                 circuit.t([0, 1, 2])
+#                 circuit.cx(0, 1)
+#                 circuit.cx(1, 2)
+#                 circuit.cx(0, 1)
+#                 circuit.t(2)
+#                 circuit.cx(1, 2)
+#                 circuit.cx(0, 1)
+#                 circuit.tdg([1, 2])
+#                 circuit.cx(1, 2)
+#                 circuit.cx(0, 1)
+#                 circuit.tdg(2)
+#                 circuit.cx(1, 2)
+#                 circuit.h(1)
+
+#                 dag_8c_toffoli = circuit_to_dag(circuit)
+
+
+
+#                 wires = dag_8c_toffoli.wires
+#                 wires[1], wires[2] = wires[2], wires[1]
+
+#                 dag.substitute_node_with_dag(node, dag_8c_toffoli, wires = wires)
+                
+                variant_dag = UnrollToffoliContextAware_.get_Toffoli_variant_dag(CCX_Variant_Gate, variant_tag = ('01', '12', 'l', 'p'), index_order = [0,2,1])
+                dag.substitute_node_with_dag(node, variant_dag)
+
+
+            else:
+
+                print('The routing pass is not correct')
+
+
+            # rule = node.op.definition.data
+            # if not rule:
+            #     if rule == []:  # empty node
+            #         dag.remove_op_node(node)
+            #         continue
+            #     raise QiskitError(
+            #         "Cannot unroll all toffoli gates. "
+            #         "No rule to expand instruction %s." % node.op.name
+            #     )
+            # decomposition = circuit_to_dag(node.op.definition)
+            # decomposition = self.run(decomposition)  # recursively unroll
+            # dag.substitute_node_with_dag(node, decomposition)
+        return dag
+    
+    @staticmethod
+    def check_order(node_orign, node_context):
+        """check the index of the context gate's physical qubits"""
+        #JLTODO:add the assertion for number of qargs.
+        index_str = ""
+        for qarg in node_context.qargs:
+            index_str += str(node_orign.qargs.index(qarg))
+        print(index_str)
+        return index_str
+    
+    @staticmethod
+    def get_Toffoli_variant_dag(variant_gate, variant_tag, index_order = [0,1,2]):
+        new_dag = DAGCircuit()
+        reg = QuantumRegister(3)
+        new_dag.add_qreg(reg)
+        regList = [reg[index_order[0]], reg[index_order[1]], reg[index_order[2]]]
+        new_dag.apply_operation_back(variant_gate(variant_tag=variant_tag), regList)
+        return new_dag
+    
+    
+class UnrollCnotContextAware_(TransformationPass):
+    """Recursively expands all toffoli gates until the circuit only contains 2q or 1q gates."""
+
+    def __init__(self, coupling_map):
+        '''
+        Initialize the UnrollToffoli pass. This pass does a layout aware decomposition of the toffoli
+        gate. If all three qubits of the toffoli are mapped to each other, we do a 6 qubit decomposition
+        else we do an eight qubit decomposition.
+
+        Args:
+            coupling_map(CouplingMap) : directed graph representing a coupling map
+        '''
+        super().__init__()
+        self.coupling_map = coupling_map
+
+    def run(self, dag):
+        """Run the UnrollCnotContextAware_ pass on `dag`.
+
+        Args:
+            dag(DAGCircuit): input dag
+        Returns:
+            DAGCircuit: output dag with CNOT gate different designs
+        Raises:
+            QiskitError: 
+        """
+        for node in dag.two_qubit_ops():
+            assert node.op.name == 'cx'
+
+#             if dag.has_calibration_for(node):
+#                 continue
+            if node.op.name == 'cx':
+                variant_dag = UnrollCnotContextAware_.get_CNOT_variant_dag()
+                dag.substitute_node_with_dag(node, variant_dag)
+        return dag
+    
+    @staticmethod
+    def get_CNOT_variant_dag(variant_tag = [0,0,0], index_order = [0,1]):
+        new_dag = DAGCircuit()
+        reg = QuantumRegister(2)
+        new_dag.add_qreg(reg)
+        regList = [reg[index_order[0]], reg[index_order[1]]]
+        new_dag.apply_operation_back(qiskit_superstaq.AceCR("+-"), regList)
+        return new_dag

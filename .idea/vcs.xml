@@ -2,6 +2,7 @@
 <project version="4">
   <component name="VcsDirectoryMappings">
     <mapping directory="$PROJECT_DIR$" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/qiskit-aer" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/qiskit-ibmq-provider" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/qiskit-terra" vcs="Git" />
   </component>
