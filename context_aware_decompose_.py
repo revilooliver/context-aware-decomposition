@@ -21,7 +21,13 @@ from qiskit.transpiler.layout import Layout
 from qiskit.dagcircuit import DAGCircuit
 from qiskit.circuit import QuantumRegister
 
+from qiskit.circuit.library.standard_gates.rx import RXGate
+from qiskit.circuit.library.standard_gates.ry import RYGate
+from qiskit.circuit.library.standard_gates.rz import RZGate
+import numpy as np
+
 from gate_variants.toffoli_variants import CCX_Variant_Gate
+from gate_variants.cx_variants import CX_Variant_Gate
 import qiskit_superstaq
 
 
@@ -308,7 +314,7 @@ class UnrollToffoliContextAware_(TransformationPass):
 class UnrollCnotContextAware_(TransformationPass):
     """Recursively expands all toffoli gates until the circuit only contains 2q or 1q gates."""
 
-    def __init__(self, coupling_map):
+    def __init__(self, coupling_map, orientation_map):
         '''
         Initialize the UnrollToffoli pass. This pass does a layout aware decomposition of the toffoli
         gate. If all three qubits of the toffoli are mapped to each other, we do a 6 qubit decomposition
@@ -319,6 +325,7 @@ class UnrollCnotContextAware_(TransformationPass):
         '''
         super().__init__()
         self.coupling_map = coupling_map
+        self.orientation_map = orientation_map
 
     def run(self, dag):
         """Run the UnrollCnotContextAware_ pass on `dag`.
@@ -330,21 +337,100 @@ class UnrollCnotContextAware_(TransformationPass):
         Raises:
             QiskitError: 
         """
+        orientation_map = self.orientation_map
         for node in dag.two_qubit_ops():
             assert node.op.name == 'cx'
 
 #             if dag.has_calibration_for(node):
 #                 continue
             if node.op.name == 'cx':
-                variant_dag = UnrollCnotContextAware_.get_CNOT_variant_dag()
-                dag.substitute_node_with_dag(node, variant_dag)
+                print((node.qargs[0].index, node.qargs[1].index), orientation_map[(node.qargs[0].index, node.qargs[1].index)])
+                predecessors = list(dag.quantum_predecessors(node))
+                successors = list(dag.quantum_successors(node))
+                for successor in successors:
+                    if successor.name in {'cx'}:
+                        intersect = [value for value in node.qargs if value in successor.qargs]
+                        print("intersect", intersect)
+                        # check length
+                        if len(intersect) == 2:
+                            #these two CNOTs apply to the same qubits, first check the direction of the link. Then check if two CNOTs have the same controll qubit.
+
+                            variant_dag = UnrollCnotContextAware_.get_CNOT_variant_dag(variant_tag = ('00', '11', 'd'))
+                            dag.substitute_node_with_dag(node, variant_dag)
+                            variant_dag_inverse = UnrollCnotContextAware_.get_CNOT_variant_dag(variant_tag = ('11', '00', 'd'))
+                            dag.substitute_node_with_dag(successor, variant_dag_inverse)
         return dag
     
+    
+    
     @staticmethod
-    def get_CNOT_variant_dag(variant_tag = [0,0,0], index_order = [0,1]):
-        new_dag = DAGCircuit()
-        reg = QuantumRegister(2)
-        new_dag.add_qreg(reg)
-        regList = [reg[index_order[0]], reg[index_order[1]]]
-        new_dag.apply_operation_back(qiskit_superstaq.AceCR("+-"), regList)
+    def get_CNOT_variant_dag(variant_tag = ('00', '11', 'd'), index_order = [0,1]):
+        
+        q = QuantumRegister(2, "q")
+        qc = QuantumCircuit(q)
+        
+        try:
+            rules = UnrollCnotContextAware_.get_rules(q, variant_tag)
+        except:
+            raise AttributeError(f"Variant_tag({variant_tag})not defined")
+
+        for instr, qargs, cargs in rules:
+            qc._append(instr, qargs, cargs)
+        new_dag = circuit_to_dag(qc)
         return new_dag
+
+    @staticmethod
+    def get_rules(q, variant_tag):
+        print(variant_tag)
+        variant_rules = {
+            ('00', '11', 'd'): [
+                (qiskit_superstaq.AceCR("+-"), [q[0], q[1]], []),
+                (RYGate(np.pi), [q[0]], []),
+                (RXGate(-np.pi/2), [q[1]], []),
+                (RZGate(-np.pi/2), [q[0]], []),
+            ],
+            ('11', '00', 'd'): [
+                (RZGate(np.pi/2), [q[0]], []),
+                (RYGate(np.pi), [q[0]], []),
+                (RXGate(np.pi/2), [q[1]], []),
+                (qiskit_superstaq.AceCR("+-"), [q[0], q[1]], []),
+            ],
+            ('01', '10', 'd'): [
+                (RZGate(np.pi/2), [q[0]], []),
+                (RXGate(np.pi/2), [q[1]], []),
+                (qiskit_superstaq.AceCR("-+"), [q[0], q[1]], []),
+                (RXGate(np.pi), [q[0]], []),
+            ],
+            ('10', '01', 'd'): [
+                (RXGate(np.pi/2), [q[0]], []),
+                (qiskit_superstaq.AceCR("-+"), [q[0], q[1]], []),
+                (RXGate(-np.pi/2), [q[1]], []),
+                (RZGate(-np.pi/2), [q[0]], []),
+            ],
+            
+            
+            
+            ('00', '11', 'u'): [
+                (RZGate(np.pi), [q[0]], []),
+                (RYGate(np.pi/2), [q[0]], []),
+                (RZGate(np.pi/2), [q[1]], []),
+                (RXGate(np.pi/2), [q[1]], []),
+                (qiskit_superstaq.AceCR("+-"), [q[1], q[0]], []),
+                (RZGate(np.pi/2), [q[0]], []),
+                (RXGate(np.pi/2), [q[0]], []),
+                (RYGate(-np.pi/2), [q[1]], []),
+            ],
+            ('11', '00', 'u'): [
+                (RYGate(np.pi/2), [q[1]], []),
+                (RXGate(-np.pi/2), [q[0]], []),
+                (RZGate(-np.pi/2), [q[0]], []),
+                (qiskit_superstaq.AceCR("+-"), [q[1], q[0]], []),
+                (RXGate(-np.pi/2), [q[1]], []),
+                (RZGate(-np.pi/2), [q[1]], []),
+                (RYGate(-np.pi/2), [q[0]], []),
+                (RZGate(-np.pi), [q[0]], []),
+            ],
+            
+          
+            }
+        return variant_rules[variant_tag]

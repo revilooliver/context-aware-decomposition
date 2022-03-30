@@ -21,6 +21,7 @@ class PassManagerConfig:
         initial_layout=None,
         basis_gates=None,
         coupling_map=None,
+        orientation_map=None,
         layout_method=None,
         routing_method=None,
         translation_method=None,
@@ -60,6 +61,7 @@ class PassManagerConfig:
         self.initial_layout = initial_layout
         self.basis_gates = basis_gates
         self.coupling_map = coupling_map
+        self.orientation_map = orientation_map
         self.layout_method = layout_method
         self.routing_method = routing_method
         self.translation_method = translation_method

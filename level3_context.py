@@ -110,6 +110,7 @@ def _parse_transpile_args(
     backend,
     basis_gates = None,
     coupling_map = None,
+    orientation_map = None,
     backend_properties = None,
     initial_layout = None,
     layout_method = None,
@@ -162,6 +163,7 @@ def _parse_transpile_args(
     durations = _parse_instruction_durations(backend, instruction_durations, dt, circuits)
     scheduling_method = _parse_scheduling_method(scheduling_method, num_circuits)
     timing_constraints = _parse_timing_constraints(backend, timing_constraints, num_circuits)
+    print("orientation", orientation_map)
     if scheduling_method and any(d is None for d in durations):
         raise TranspilerError(
             "Transpiling a circuit with a scheduling method"
@@ -192,6 +194,7 @@ def _parse_transpile_args(
             "pass_manager_config": PassManagerConfig(
                 basis_gates=args[0],
                 coupling_map=args[1],
+                orientation_map=orientation_map,
                 backend_properties=args[2],
                 initial_layout=args[3],
                 layout_method=args[4],

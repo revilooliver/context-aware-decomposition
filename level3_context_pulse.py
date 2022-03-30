@@ -139,6 +139,7 @@ def level_3_context_pulse_pass_manager(pass_manager_config: PassManagerConfig) -
     """
     basis_gates = pass_manager_config.basis_gates
     coupling_map = pass_manager_config.coupling_map
+    orientation_map = pass_manager_config.orientation_map
     initial_layout = pass_manager_config.initial_layout
     
     
@@ -324,7 +325,7 @@ def level_3_context_pulse_pass_manager(pass_manager_config: PassManagerConfig) -
         AlignMeasures(alignment=timing_constraints.acquire_alignment),
     ]
     # 11. Unroll the CNOT gates with pulse-level awareness:
-    _pulse_context = [UnrollCnotContextAware_(coupling_map)]
+    _pulse_context = [UnrollCnotContextAware_(coupling_map, orientation_map)]
 
     # Build pass manager
     pm3 = PassManager()
@@ -381,6 +382,7 @@ def level_3_pulse_pass_manager(pass_manager_config: PassManagerConfig) -> PassMa
     """
     basis_gates = pass_manager_config.basis_gates
     coupling_map = pass_manager_config.coupling_map
+    orientation_map = pass_manager_config.orientation_map
     initial_layout = pass_manager_config.initial_layout
     
     
@@ -566,7 +568,7 @@ def level_3_pulse_pass_manager(pass_manager_config: PassManagerConfig) -> PassMa
         AlignMeasures(alignment=timing_constraints.acquire_alignment),
     ]
     # 11. Unroll the CNOT gates with pulse-level awareness:
-    _pulse_context = [UnrollCnotContextAware_(coupling_map)]
+    _pulse_context = [UnrollCnotContextAware_(coupling_map, orientation_map)]
 
     # Build pass manager
     pm3 = PassManager()
