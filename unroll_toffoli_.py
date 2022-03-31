@@ -44,6 +44,9 @@ class UnrollToffoli_(TransformationPass):
             DAGCircuit: output dag with maximum node degrees of 2
         Raises:
             QiskitError: if a 3q+ gate is not decomposable
+
+        Note: In a toffoli gate, node.qargs is a list of three qubits. The first two qubits are the control qubits and the last qubit is the target qubit.
+        i.e. node.qargs[0] and node.qargs[1] are control qubits and node.qargs[2] is the target qubit.
         """
         for node in dag.multi_qubit_ops():
 
@@ -51,36 +54,47 @@ class UnrollToffoli_(TransformationPass):
 
             if dag.has_calibration_for(node):
                 continue
-            
+           
             # substitute the toffoli gate with its 6/8 qubit decomposition based on the layout
             #The layout has been applied to the dag. So we do not need that information
             canonical_register = dag.qregs["q"]
             trivial_layout = Layout.generate_trivial_layout(canonical_register)
             current_layout = trivial_layout.copy()
-            
+           
             #converting the datatype 'qubit' to the datatype 'int'
-            physical_q0 = current_layout[node.qargs[0]]
-            physical_q1 = current_layout[node.qargs[1]]
-            physical_q2 = current_layout[node.qargs[2]]
+            control1 = current_layout[node.qargs[0]]
+            control2 = current_layout[node.qargs[1]]
+            target = current_layout[node.qargs[2]]
 
-            print('The arguments for the toffoli node are: ', node.qargs[0], node.qargs[1], node.qargs[2])
-            print('The distances between the toffoli qubits are: ', self.coupling_map.distance(physical_q0, physical_q1), 'between qubits 0 and 1')
-            print('The distances between the toffoli qubits are: ', self.coupling_map.distance(physical_q1, physical_q2), 'between qubits 1 and 2')
-            print('The distances between the toffoli qubits are: ', self.coupling_map.distance(physical_q0, physical_q2), 'between qubits 0 and 2')
+            #print('The arguments for the toffoli node are: ', node.qargs[0], node.qargs[1], node.qargs[2])
+            #print('The distances between the toffoli qubits are: ', self.coupling_map.distance(control1, control2), 'between qubits 0 and 1')
+            #print('The distances between the toffoli qubits are: ', self.coupling_map.distance(control2, target), 'between qubits 1 and 2')
+            #print('The distances between the toffoli qubits are: ', self.coupling_map.distance(control1, target), 'between qubits 0 and 2')
 
             #now compute the distances
-            bool1 = self.coupling_map.distance(physical_q0, physical_q1) == 1
-            bool2 = self.coupling_map.distance(physical_q1, physical_q2) == 1
-            bool3 = self.coupling_map.distance(physical_q0, physical_q2) == 1
+            bool1 = self.coupling_map.distance(control1, control2) == 1
+            bool2 = self.coupling_map.distance(control2, target) == 1
+            bool3 = self.coupling_map.distance(control1, target) == 1
+
+            #distances
+            d1 = self.coupling_map.distance(control1, control2)
+            d2 = self.coupling_map.distance(control2, target)
+            d3 = self.coupling_map.distance(control1, target)
+
 
             #if all qubits are adjacent to each other
             if bool1 and bool2 and bool3:
 
+                #print('Case 0: ', control1, control2, target)
+                #print('distance between control 1 and control 2: ', d1)
+                #print('distance between control 2 and target: ', d2)
+                #print('distance between control 1 and target: ', d3)
 
-                print('The physical qubits for the toffoli are: ', physical_q0, physical_q1, physical_q2)
-                print('The required toffoli will be decomposed using a 6 cnot decomposition')
+                # print('The physical qubits for the toffoli are: ', control1, control2, target)
+                # print('The required toffoli will be decomposed using a 6 cnot decomposition')
 
                 #create a 6 cnot circuit
+                #print('6 cnot toffoli: ', control1, control2, target)
                 circuit = QuantumCircuit(3)
                 circuit.h(2)
                 circuit.cx(1, 2)
@@ -99,15 +113,21 @@ class UnrollToffoli_(TransformationPass):
                 circuit.h(2)
 
                 dag_6c_toffoli = circuit_to_dag(circuit)
-                dag.substitute_node_with_dag(node, dag_6c_toffoli)
+                dag.substitute_node_with_dag(node, dag_6c_toffoli, wires = [dag_6c_toffoli.wires[0], dag_6c_toffoli.wires[1], dag_6c_toffoli.wires[2]])
 
             #if physical qubit 1 is connected to both but zero and two are not connected
             elif bool1 and bool2 and (not bool3):
 
-                print('The physical qubits for the toffoli are: ', physical_q0, physical_q1, physical_q2)
-                print('The required toffoli will be decomposed using an 8 cnot decomposition - one in center')
+                # print('The physical qubits for the toffoli are: ', control1, control2, target)
+                # print('The required toffoli will be decomposed using an 8 cnot decomposition - one in center')
 
                 #create an 8 cnot circuit
+                #print('Case 1: ', control1, control2, target)
+                #print('distance between control 1 and control 2: ', d1)
+                #print('distance between control 2 and target: ', d2)
+                #print('distance between control 1 and target: ', d3)
+
+
                 circuit = QuantumCircuit(3)
                 circuit.h(2)
                 circuit.t([0, 1, 2])
@@ -125,17 +145,21 @@ class UnrollToffoli_(TransformationPass):
                 circuit.h(2)
 
                 dag_8c_toffoli = circuit_to_dag(circuit)
-                dag.substitute_node_with_dag(node, dag_8c_toffoli)
+                dag.substitute_node_with_dag(node, dag_8c_toffoli, wires = [dag_8c_toffoli.wires[0], dag_8c_toffoli.wires[1], dag_8c_toffoli.wires[2]])
 
             #if physical qubit 0 is connected to both but one and two are not connected
             elif bool1 and (not bool2) and bool3:
 
-                print('The physical qubits for the toffoli are: ', physical_q0, physical_q1, physical_q2)
-                print('The required toffoli will be decomposed using an 8 cnot decomposition - zero in center')
+                # print('The physical qubits for the toffoli are: ', control1, control2, target)
+                # print('The required toffoli will be decomposed using an 8 cnot decomposition - zero in center')
 
                 #create an 8 cnot circuit
-                circuit = QuantumCircuit(3)
+                #print('Case 2: ', control1, control2, target)
+                #print('distance between control 1 and control 2: ', d1)
+                #print('distance between control 2 and target: ', d2)
+                #print('distance between control 1 and target: ', d3)
 
+                circuit = QuantumCircuit(3)
                 circuit.h(2)
                 circuit.t([0, 1, 2])
                 circuit.cx(0, 1)
@@ -152,17 +176,21 @@ class UnrollToffoli_(TransformationPass):
                 circuit.h(2)
 
                 dag_8c_toffoli = circuit_to_dag(circuit)
-                dag.substitute_node_with_dag(node, dag_8c_toffoli)
-
+                dag.substitute_node_with_dag(node, dag_8c_toffoli, wires = [dag_8c_toffoli.wires[1], dag_8c_toffoli.wires[0], dag_8c_toffoli.wires[2]])
+               
             #if physical qubit 2 is connected to both but 0 and 1 are not connected
             elif (not bool1) and bool2 and bool3:
 
-                print('The physical qubits for the toffoli are: ', physical_q0, physical_q1, physical_q2)
-                print('The required toffoli will be decomposed using an 8 cnot decomposition - two in center')
+                # print('The physical qubits for the toffoli are: ', control1, control2, target)
+                # print('The required toffoli will be decomposed using an 8 cnot decomposition - two in center')
 
                 #create a 8 cnot circuit
+                #print('Case 3: ', control1, control2, target)
+                #print('distance between control 1 and control 2: ', d1)
+                #print('distance between control 2 and target: ', d2)
+                #print('distance between control 1 and target: ', d3)
+               
                 circuit = QuantumCircuit(3)
-
                 circuit.h(1)
                 circuit.t([0, 1, 2])
                 circuit.cx(0, 1)
@@ -179,13 +207,8 @@ class UnrollToffoli_(TransformationPass):
                 circuit.h(1)
 
                 dag_8c_toffoli = circuit_to_dag(circuit)
-
-
-
-                wires = dag_8c_toffoli.wires
-                wires[1], wires[2] = wires[2], wires[1]
-
-                dag.substitute_node_with_dag(node, dag_8c_toffoli, wires = wires)
+                dag.substitute_node_with_dag(node, dag_8c_toffoli, wires = [dag_8c_toffoli.wires[0], dag_8c_toffoli.wires[2], dag_8c_toffoli.wires[1]])
+                #node.qargs[1], node.qargs[2] = node.qargs[2], node.qargs[1]
 
             else:
 
