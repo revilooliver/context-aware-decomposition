@@ -67,7 +67,7 @@ class CCX_Variant_Gate(ControlledGate):
 
     """
 
-    def __init__(self, label: Optional[str] = None, ctrl_state: Optional[Union[str, int]] = None, variant_tag = ['01', '02', 'p']):
+    def __init__(self, label: Optional[str] = None, ctrl_state: Optional[Union[str, int]] = None, variant_tag = ['01', '12', 'f', 'p']):
         """Create new CCX gate."""
         super().__init__(
             "ccx_variant", 3, [], num_ctrl_qubits=2, label=label, ctrl_state=ctrl_state, base_gate=XGate()
@@ -122,7 +122,8 @@ class CCX_Variant_Gate(ControlledGate):
 
 #         self.definition = qc
     def get_rules(self, q, variant_tag):
-        #The Canonical CCX decomposition is ('12', '01', 's').
+        #The Canonical CCX decomposition is ('12', '01','f', 's').
+        #Note: the inverse of t is tdg, so we can't simply inverse the order
         variant_rules = {
             ('01', '01', 'f', 's'): [
                 (HGate(), [q[2]], []),
@@ -337,17 +338,35 @@ class CCX_Variant_Gate(ControlledGate):
                 (HGate(), [q[2]], []),
             ]
             }
-        return variant_rules[variant_tag]
-        #JLTODO: the inverse of t is tdg, so we can't simply inverse the order
-#         inversed_tag = CCX_Variant_Gate.inverse_tag(variant_tag)
-#         print("get rules", inversed_tag)
-#         if variant_tag in variant_rules.keys():
-#             return variant_rules[variant_tag]
-#         #since ccx is a self inversed gate the reversed order of the basic gates is its self inverse
-#         elif inversed_tag in variant_rules.keys():
-#             return variant_rules[inversed_tag][::-1]
-#         else:
-#             return None
+        try:
+            return variant_rules[variant_tag]
+        except:
+            variant_tag_list = list(variant_tag)
+            #based on the last tag 's' or 'p', find the corresponding tag:
+            possible_tag = ['01', '10', '02', '20', '12']
+            if variant_tag[-1] is 's':
+                #specify the successor tag first
+                for tag in possible_tag:
+                    try:
+                        return variant_rules[tuple([tag] + variant_tag[1:])]
+                    except:
+                        pass
+            elif variant_tag[-1] is 'p':
+                #specify the predecessor tag first
+                for tag in possible_tag:
+                    try:
+                        return variant_rules[tuple(variant_tag[0] + [tag] + variant_tag[2:])]
+                    except:
+                        pass
+            else:
+                raise AttributeError(f"Unexpcted tag value{variant_tag[-1]}")
+        #if both of them are not found:
+        if variant_tag[-2] is 'f':
+            return variant_rules[('01', '12', 'f', 'p')]
+        else:
+            return variant_rules[('01', '12', 'l', 'p')]
+                                             
+                
 
     def control(
         self,

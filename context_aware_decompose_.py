@@ -93,7 +93,7 @@ class UnrollToffoliContextAware_(TransformationPass):
             if bool1 and bool2 and bool3:
 
 
-                print('The physical qubits for the toffoli are: ', physical_q0, physical_q1, physical_q2)
+                print('The physical qubits for the toffoli are: ', control1, control2, target)
                 print('The required toffoli will be decomposed using a 6 cnot decomposition')
 
                 #create a 6 cnot circuit
@@ -107,11 +107,17 @@ class UnrollToffoliContextAware_(TransformationPass):
                         string = string + np.name + ","
                     print(string)
                 #the variant_tag specifies the gate decomposition. ['predecessor', 'successor', 'linear/fullyconnected', 'heavy on predecessor/successor'] First, check all the predecessors and specify the first tag based on the predecessors. Then traverse the successors and specify the second tag 'successor'. The 'linear/fullyconnected' are specified based on the physical qubit connectivity. The last tag 'heavy' is specified while checking both predecessor. The tags are based on the order of the first CNOT gate. For example, '01' means the first cnot gate's control qubit is 0 and target qubit is 1. The initial value is '00'.
-                variant_tag=['00','00','f','p']
+                variant_tag = ['00','00','f','p']
                 #first we need to consider the successors to identify the gate cancellation with inversed gates
                 for successor in successors:
                     if successor.name in {'ccx'}:
-
+                        variant_tag_succ = ['00','00','f','p']
+                        variant_tag, variant_tag_succ = UnrollToffoliContextAware_.specify_variant_tag(dag, variant_tag, variant_tag_succ, node, successor)
+                        print(variant_tag, variant_tag_succ)
+                        variant_dag = UnrollToffoliContextAware_.get_Toffoli_variant_dag(CCX_Variant_Gate, variant_tag=tuple(variant_tag))
+                        dag.substitute_node_with_dag(node, variant_dag)
+                        variant_dag_succ = UnrollToffoliContextAware_.get_Toffoli_variant_dag(CCX_Variant_Gate, variant_tag=tuple(variant_tag_succ))
+                        dag.substitute_node_with_dag(successor, variant_dag_succ)
                         #Makesure the CX is the exact successor(no gates in between)
 #                     if successor.name == 'cx' and len(list(dag.quantum_predecessors(successor))) == 1:
 #                         index_str = UnrollToffoliContextAware_.check_order(node, successor)
@@ -122,71 +128,71 @@ class UnrollToffoliContextAware_(TransformationPass):
 #                     variant_dag = UnrollToffoliContextAware_.get_Toffoli_variant_dag(CCX_Variant_Gate, variant_tag=tuple(variant_tag))
 #                     dag.substitute_node_with_dag(node, variant_dag)
                 
-                for predecessor in predecessors:
-                    if predecessor.name in {'ccx', 'ccx_variant'}:
-                        #check the number of common wires
-                        print("pre qargs", type(predecessor.qargs), predecessor.qargs)
-                        print("node qargs", node.qargs)
-                        intersect = [value for value in node.qargs if value in predecessor.qargs]
-                        print("intersect", intersect)
+#                 for predecessor in predecessors:
+#                     if predecessor.name in {'ccx', 'ccx_variant'}:
+#                         #check the number of common wires
+#                         print("pre qargs", type(predecessor.qargs), predecessor.qargs)
+#                         print("node qargs", node.qargs)
+#                         intersect = [value for value in node.qargs if value in predecessor.qargs]
+#                         print("intersect", intersect)
 
-                        # check length
-                        if len(intersect) == 2:
-                            cond1 = dag.next_node_on_wire(node=predecessor, wire = intersect[0]) is node
-                            cond2 = dag.next_node_on_wire(node=predecessor, wire = intersect[1]) is node
-                            print("two intersection conditions", cond1, cond2)
-                            #make sure there is no gate between the intersection qargs.
-                            if cond1 and cond2:
-                                variant_tag[0] = str(node.qargs.index(intersect[0])) + str(node.qargs.index(intersect[1]))
-                                #set the tag to 'p' since it can be cancelled with the predecessor
-                                variant_tag[-1] = 'p'
-                            print(variant_tag)
-                            break
-                        elif len(intersect) == 3:
-                            #make sure there is only one gate in between
-                            cond1 = dag.next_node_on_wire(node=predecessor, wire = intersect[0]) is node
-                            cond2 = dag.next_node_on_wire(node=predecessor, wire = intersect[1]) is node
-                            cond3 = dag.next_node_on_wire(node=predecessor, wire = intersect[2]) is node
-                            print("three intersection conditions", cond1, cond2, cond3)
-                            if cond1 is True:
-                                if cond2 is True:
-                                    #All true TTT or first two conditions are true: TTF
-                                    variant_tag[0] = str(node.qargs.index(intersect[0])) + str(node.qargs.index(intersect[1]))
-                                    #set the tag to 'p' since it can be cancelled with the predecessor
-                                    variant_tag[-1] = 'p'
-                                    break
-                                else:
-                                    #TFT
-                                    if cond3 is True:
-                                        variant_tag[0] = str(node.qargs.index(intersect[0])) + str(node.qargs.index(intersect[2]))
-                                        #set the tag to 'p' since it can be cancelled with the predecessor
-                                        variant_tag[-1] = 'p'
-                                        break
-                            else:
-                                #FTT
-                                if cond2 is True and cond3 is True:
-                                    variant_tag[0] = str(node.qargs.index(intersect[1])) + str(node.qargs.index(intersect[2]))
-                                    #set the tag to 'p' since it can be cancelled with the predecessor
-                                    variant_tag[-1] = 'p'
-                                    break
-                            print(variant_tag)
-                            break
-                    if predecessor.name == 'cx':
-                        #test the cx condition
-                        cond1 = dag.next_node_on_wire(node=predecessor, wire = predecessor.qargs[0]) is node
-                        cond2 = dag.next_node_on_wire(node=predecessor, wire = predecessor.qargs[1]) is node
-                        if cond1 and cond2:
-                            #Makesure the CX is the exact predecessor(no gates in between)
-                            index_str = UnrollToffoliContextAware_.check_order(node, predecessor)
-                            print(index_str)
-                            variant_tag[0] = index_str
-                            variant_tag[2] = 'p'
-                            break
+#                         # check length
+#                         if len(intersect) == 2:
+#                             cond1 = dag.next_node_on_wire(node=predecessor, wire = intersect[0]) is node
+#                             cond2 = dag.next_node_on_wire(node=predecessor, wire = intersect[1]) is node
+#                             print("two intersection conditions", cond1, cond2)
+#                             #make sure there is no gate between the intersection qargs.
+#                             if cond1 and cond2:
+#                                 variant_tag[0] = str(node.qargs.index(intersect[0])) + str(node.qargs.index(intersect[1]))
+#                                 #set the tag to 'p' since it can be cancelled with the predecessor
+#                                 variant_tag[-1] = 'p'
+#                             print(variant_tag)
+#                             break
+#                         elif len(intersect) == 3:
+#                             #make sure there is only one gate in between
+#                             cond1 = dag.next_node_on_wire(node=predecessor, wire = intersect[0]) is node
+#                             cond2 = dag.next_node_on_wire(node=predecessor, wire = intersect[1]) is node
+#                             cond3 = dag.next_node_on_wire(node=predecessor, wire = intersect[2]) is node
+#                             print("three intersection conditions", cond1, cond2, cond3)
+#                             if cond1 is True:
+#                                 if cond2 is True:
+#                                     #All true TTT or first two conditions are true: TTF
+#                                     variant_tag[0] = str(node.qargs.index(intersect[0])) + str(node.qargs.index(intersect[1]))
+#                                     #set the tag to 'p' since it can be cancelled with the predecessor
+#                                     variant_tag[-1] = 'p'
+#                                     break
+#                                 else:
+#                                     #TFT
+#                                     if cond3 is True:
+#                                         variant_tag[0] = str(node.qargs.index(intersect[0])) + str(node.qargs.index(intersect[2]))
+#                                         #set the tag to 'p' since it can be cancelled with the predecessor
+#                                         variant_tag[-1] = 'p'
+#                                         break
+#                             else:
+#                                 #FTT
+#                                 if cond2 is True and cond3 is True:
+#                                     variant_tag[0] = str(node.qargs.index(intersect[1])) + str(node.qargs.index(intersect[2]))
+#                                     #set the tag to 'p' since it can be cancelled with the predecessor
+#                                     variant_tag[-1] = 'p'
+#                                     break
+#                             print(variant_tag)
+#                             break
+#                     if predecessor.name == 'cx':
+#                         #test the cx condition
+#                         cond1 = dag.next_node_on_wire(node=predecessor, wire = predecessor.qargs[0]) is node
+#                         cond2 = dag.next_node_on_wire(node=predecessor, wire = predecessor.qargs[1]) is node
+#                         if cond1 and cond2:
+#                             #Makesure the CX is the exact predecessor(no gates in between)
+#                             index_str = UnrollToffoliContextAware_.check_order(node, predecessor)
+#                             print(index_str)
+#                             variant_tag[0] = index_str
+#                             variant_tag[2] = 'p'
+#                             break
 
             #if physical qubit 1 is connected to both but zero and two are not connected
             elif bool1 and bool2 and (not bool3):
 
-                print('The physical qubits for the toffoli are: ', physical_q0, physical_q1, physical_q2)
+                print('The physical qubits for the toffoli are: ', control1, control2, target)
                 print('The required toffoli will be decomposed using an 8 cnot decomposition - one in center')
 
                 variant_dag = UnrollToffoliContextAware_.get_Toffoli_variant_dag(CCX_Variant_Gate, variant_tag = ('01', '12', 'l', 'p'), index_order = [0,1,2])
@@ -195,7 +201,7 @@ class UnrollToffoliContextAware_(TransformationPass):
             #if physical qubit 0 is connected to both but one and two are not connected
             elif bool1 and (not bool2) and bool3:
 
-                print('The physical qubits for the toffoli are: ', physical_q0, physical_q1, physical_q2)
+                print('The physical qubits for the toffoli are: ', control1, control2, target)
                 print('The required toffoli will be decomposed using an 8 cnot decomposition - zero in center')
 
                 variant_dag = UnrollToffoliContextAware_.get_Toffoli_variant_dag(CCX_Variant_Gate, variant_tag = ('01', '12', 'l', 'p'), index_order = [1,0,2])
@@ -204,7 +210,7 @@ class UnrollToffoliContextAware_(TransformationPass):
             #if physical qubit 2 is connected to both but 0 and 1 are not connected
             elif (not bool1) and bool2 and bool3:
 
-                print('The physical qubits for the toffoli are: ', physical_q0, physical_q1, physical_q2)
+                print('The physical qubits for the toffoli are: ', control1, control2, target)
                 print('The required toffoli will be decomposed using an 8 cnot decomposition - two in center')
 
                 variant_dag = UnrollToffoliContextAware_.get_Toffoli_variant_dag(CCX_Variant_Gate, variant_tag = ('01', '12', 'l', 'p'), index_order = [0,2,1])
@@ -217,7 +223,7 @@ class UnrollToffoliContextAware_(TransformationPass):
 
         return dag
     @staticmethod
-    def specify_variant_tag(variant_tag, variant_tag_succ, node, successor):
+    def specify_variant_tag(dag, variant_tag, variant_tag_succ, node, successor):
         intersect = [value for value in node.qargs if value in successor.qargs]
         # check length
         if len(intersect) == 2:
@@ -231,37 +237,39 @@ class UnrollToffoliContextAware_(TransformationPass):
                 variant_tag[-1] = 's'
                 variant_tag_succ[0] = str(successor.qargs.index(intersect[0])) + str(successor.qargs.index(intersect[1]))
                 variant_tag_succ[-1] = 'p'
-            print(variant_tag, variant_tag_succ)
-            return [variant_tag, variant_tag_succ]
+            return variant_tag, variant_tag_succ
         elif len(intersect) == 3:
             #make sure there is only one gate in between
-            cond1 = dag.next_node_on_wire(node=successor, wire = intersect[0]) is node
-            cond2 = dag.next_node_on_wire(node=successor, wire = intersect[1]) is node
-            cond3 = dag.next_node_on_wire(node=successor, wire = intersect[2]) is node
+            cond1 = dag.next_node_on_wire(node=node, wire = intersect[0]) is successor
+            cond2 = dag.next_node_on_wire(node=node, wire = intersect[1]) is successor
+            cond3 = dag.next_node_on_wire(node=node, wire = intersect[2]) is successor
             print("three intersection conditions", cond1, cond2, cond3)
             if cond1 is True:
                 if cond2 is True:
                     #All true TTT or first two conditions are true: TTF
-                    variant_tag[0] = str(node.qargs.index(intersect[0])) + str(node.qargs.index(intersect[1]))
-                    #set the tag to 'p' since it can be cancelled with the predecessor
-                    variant_tag[-1] = 'p'
-                    break
+                    variant_tag[1] = str(node.qargs.index(intersect[0])) + str(node.qargs.index(intersect[1]))
+                    #set the tag to 's' since it can be cancelled with the successor
+                    variant_tag[-1] = 's'
+                    variant_tag_succ[0] = str(successor.qargs.index(intersect[0])) + str(successor.qargs.index(intersect[1]))
+                    variant_tag_succ[-1] = 'p'
                 else:
                     #TFT
                     if cond3 is True:
-                        variant_tag[0] = str(node.qargs.index(intersect[0])) + str(node.qargs.index(intersect[2]))
-                        #set the tag to 'p' since it can be cancelled with the predecessor
-                        variant_tag[-1] = 'p'
-                        break
+                        variant_tag[1] = str(node.qargs.index(intersect[0])) + str(node.qargs.index(intersect[2]))
+                        #set the tag to 's' since it can be cancelled with the successor
+                        variant_tag[-1] = 's'
+                        variant_tag_succ[0] = str(successor.qargs.index(intersect[0])) + str(successor.qargs.index(intersect[2]))
+                        variant_tag_succ[-1] = 'p'
             else:
                 #FTT
                 if cond2 is True and cond3 is True:
-                    variant_tag[0] = str(node.qargs.index(intersect[1])) + str(node.qargs.index(intersect[2]))
-                    #set the tag to 'p' since it can be cancelled with the predecessor
-                    variant_tag[-1] = 'p'
-                    break
-            print(variant_tag)
-            break
+                    variant_tag[1] = str(node.qargs.index(intersect[1])) + str(node.qargs.index(intersect[2]))
+                    #set the tag to 's' since it can be cancelled with the successor
+                    variant_tag[-1] = 's'
+                    variant_tag_succ[0] = str(successor.qargs.index(intersect[1])) + str(successor.qargs.index(intersect[2]))
+                    variant_tag_succ[-1] = 'p'
+        return variant_tag, variant_tag_succ
+    
     @staticmethod
     def check_order(node_orign, node_context):
         """check the index of the context gate's physical qubits"""
