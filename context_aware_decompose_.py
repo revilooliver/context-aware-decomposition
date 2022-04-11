@@ -56,19 +56,22 @@ class UnrollToffoliContextAware_(TransformationPass):
         Raises:
             QiskitError: if a 3q+ gate is not decomposable
         """
-        for node in dag.multi_qubit_ops():
+        multi_qubit_op_list = dag.multi_qubit_ops()
+        substituted_nodes = []
+        substituted_tags = []
+        for node in multi_qubit_op_list:
 
             assert node.op.name == 'ccx'
 
             if dag.has_calibration_for(node):
                 continue
-            
+
             # substitute the toffoli gate with its 6/8 qubit decomposition based on the layout
             #The layout has been applied to the dag. So we do not need that information
             canonical_register = dag.qregs["q"]
             trivial_layout = Layout.generate_trivial_layout(canonical_register)
             current_layout = trivial_layout.copy()
-            
+
             #converting the datatype 'qubit' to the datatype 'int'
             control1 = current_layout[node.qargs[0]]
             control2 = current_layout[node.qargs[1]]
@@ -83,90 +86,217 @@ class UnrollToffoliContextAware_(TransformationPass):
             bool1 = self.coupling_map.distance(control1, control2) == 1
             bool2 = self.coupling_map.distance(control2, target) == 1
             bool3 = self.coupling_map.distance(control1, target) == 1
-            
+
             #distances
             d1 = self.coupling_map.distance(control1, control2)
             d2 = self.coupling_map.distance(control2, target)
             d3 = self.coupling_map.distance(control1, target)
-            
+
+            variant_tag = ['00','00','f','p']
+            variant_tag_succ = ['00','00','f','p']
             #if all qubits are adjacent to each other
             if bool1 and bool2 and bool3:
 
 
                 print('The physical qubits for the toffoli are: ', control1, control2, target)
                 print('The required toffoli will be decomposed using a 6 cnot decomposition')
-
+                index_order = [0, 1, 2]
                 #create a 6 cnot circuit
-                
-                predecessors = list(dag.quantum_predecessors(node))
-                successors = list(dag.quantum_successors(node))
-                blocks = self.property_set["block_list"]
-                for block in blocks:
-                    string = ""
-                    for np in block:
-                        string = string + np.name + ","
-                    print(string)
-                #the variant_tag specifies the gate decomposition. ['predecessor', 'successor', 'linear/fullyconnected', 'heavy on predecessor/successor'] First, check all the predecessors and specify the first tag based on the predecessors. Then traverse the successors and specify the second tag 'successor'. The 'linear/fullyconnected' are specified based on the physical qubit connectivity. The last tag 'heavy' is specified while checking both predecessor. The tags are based on the order of the first CNOT gate. For example, '01' means the first cnot gate's control qubit is 0 and target qubit is 1. The initial value is '00'.
-                variant_tag = ['00','00','f','p']
-                variant_tag_succ = ['00','00','f','p']
-                #first we need to consider the successors to identify the gate cancellation with inversed gates
-                for successor in successors:
-                    if successor.name in {'ccx'}:
-                        variant_tag, variant_tag_succ = UnrollToffoliContextAware_.specify_variant_tag(dag, variant_tag, variant_tag_succ, node, successor)
-                        print("calculated tags", variant_tag, variant_tag_succ)
-                        if variant_tag_succ != ['00','00','f','p']:
-                            #the variant_tag_succ has been specified
-                            variant_dag = UnrollToffoliContextAware_.get_Toffoli_variant_dag(CCX_Variant_Gate, variant_tag=tuple(variant_tag))
-                            dag.substitute_node_with_dag(node, variant_dag)
-                            variant_dag_succ = UnrollToffoliContextAware_.get_Toffoli_variant_dag(CCX_Variant_Gate, variant_tag=tuple(variant_tag_succ))
-                            dag.substitute_node_with_dag(successor, variant_dag_succ)
-                            break
-#                     if successor.name in {'cx'}:
-#                         #check if there is gate in between
-#                         variant_tag, variant_tag_succ = UnrollToffoliContextAware_.specify_variant_tag(dag, variant_tag, variant_tag_succ, node, successor)
-#                         print("calculated tags", variant_tag, variant_tag_succ)
-#                         if variant_tag_succ != ['00','00','f','p']:
-#                             #the variant_tag_succ has been specified
-#                             variant_dag = UnrollToffoliContextAware_.get_Toffoli_variant_dag(CCX_Variant_Gate, variant_tag=tuple(variant_tag))
-#                             dag.substitute_node_with_dag(node, variant_dag)
-#                             variant_dag_succ = UnrollToffoliContextAware_.get_Toffoli_variant_dag(CCX_Variant_Gate, variant_tag=tuple(variant_tag_succ))
-#                             dag.substitute_node_with_dag(successor, variant_dag_succ)
-#                             break
             #if physical qubit 1 is connected to both but zero and two are not connected
             elif bool1 and bool2 and (not bool3):
 
                 print('The physical qubits for the toffoli are: ', control1, control2, target)
                 print('The required toffoli will be decomposed using an 8 cnot decomposition - one in center')
-                index_order = [0, 1, 2]
-                variant_dag = UnrollToffoliContextAware_.get_Toffoli_variant_dag(CCX_Variant_Gate, variant_tag = ('01', '12', 'l1', 'p'), index_order = [0,1,2])
-                dag.substitute_node_with_dag(node, variant_dag)
+                variant_tag[-2] = variant_tag_succ[-2] = 'l1' #+ str(actual_order.index(control2))
+#                     variant_dag = UnrollToffoliContextAware_.get_Toffoli_variant_dag(CCX_Variant_Gate, variant_tag = ('01', '12', 'l1', 'p'), index_order = [0,1,2])
+#                     dag.substitute_node_with_dag(node, variant_dag)
 
             #if physical qubit 0 is connected to both but one and two are not connected
             elif bool1 and (not bool2) and bool3:
 
                 print('The physical qubits for the toffoli are: ', control1, control2, target)
                 print('The required toffoli will be decomposed using an 8 cnot decomposition - zero in center')
-
-                variant_dag = UnrollToffoliContextAware_.get_Toffoli_variant_dag(CCX_Variant_Gate, variant_tag = ('01', '12', 'l0', 'p'), index_order = [1,0,2])
-                dag.substitute_node_with_dag(node, variant_dag)
+                variant_tag[-2] = variant_tag_succ[-2] = 'l0' #+ str(actual_order.index(control1))
+#                     variant_dag = UnrollToffoliContextAware_.get_Toffoli_variant_dag(CCX_Variant_Gate, variant_tag = ('01', '12', 'l0', 'p'), index_order = [1,0,2])
+#                     dag.substitute_node_with_dag(node, variant_dag)
 
             #if physical qubit 2 is connected to both but 0 and 1 are not connected
             elif (not bool1) and bool2 and bool3:
-
                 print('The physical qubits for the toffoli are: ', control1, control2, target)
                 print('The required toffoli will be decomposed using an 8 cnot decomposition - two in center')
-
-                variant_dag = UnrollToffoliContextAware_.get_Toffoli_variant_dag(CCX_Variant_Gate, variant_tag = ('01', '12', 'l2', 'p'), index_order = [0,2,1])
-                dag.substitute_node_with_dag(node, variant_dag)
+                variant_tag[-2] = variant_tag_succ[-2] = 'l2' #+ str(actual_order.index(target))
+#                     variant_dag = UnrollToffoliContextAware_.get_Toffoli_variant_dag(CCX_Variant_Gate, variant_tag = ('01', '12', 'l2', 'p'), index_order = [0,2,1])
+#                     dag.substitute_node_with_dag(node, variant_dag)
 
 
             else:
 
                 print('The routing pass is not correct')
+            
+            if node in substituted_nodes:
+                variant_tag = substituted_tags[substituted_nodes.index(node)]
+                variant_tag[-2] = variant_tag_succ[-2]
+                
+                
+#                 successors = list(dag.quantum_successors(node))
+#                 blocks = self.property_set["block_list"]
+#                 two_qubit_block = []
+#                 for successor in successors:
+#                     if successor.name in {'ccx'}:
+#                         variant_tag, variant_tag_succ = UnrollToffoliContextAware_.specify_variant_succ_ccx_tag(dag, variant_tag, variant_tag_succ, node, successor, last_tag = 'p')
+#                         print("calculated tags for substituted", variant_tag, variant_tag_succ)
+#                         if variant_tag_succ[0:2] != ['00','00']:
+#                             #the variant_tag_succ has been specified, add the successor to the substituted nodes
+# #                             substituted_nodes.append(successor)
+# #                             substituted_tags.append(variant_tag_succ)
+
+#                             variant_tag_succ = ['00','00','f','p']
+#                             break
+#                     if successor.name in {'cx', 'swap'}:
+#                         variant_tag = UnrollToffoliContextAware_.specify_variant_succ_cx_tag(dag, variant_tag, node, successor, last_tag = 'p')
+#                     #search for two qubit blocks:
+#                     for block in blocks:
+#                         if successor in block:
+#                             suc_index = successors.index(successor)
+#                             if suc_index != len(successors) - 1: #if it's not the last one
+#                                 for successor2 in successors[suc_index + 1:]:
+#                                     if successor2 in block:
+#                                         two_qubit_block = [successor, successor2]
+#                                         break
+#                     if len(two_qubit_block) != 0:
+#                         print("identified two_qubit block for successor")
+#                         print(successor.qargs, successor2.qargs)
+#                         intersect = [value for value in node.qargs if value in successor.qargs or value in successor2.qargs]
+#                         variant_tag[1] = str(node.qargs.index(intersect[0])) + str(node.qargs.index(intersect[1]))
+#                         two_qubit_block = []
+                        
+#                 print("the optimized substituted tag", variant_tag)
+                variant_dag = UnrollToffoliContextAware_.get_Toffoli_variant_dag(CCX_Variant_Gate, variant_tag=tuple(variant_tag))
+                dag.substitute_node_with_dag(node, variant_dag)
+                pass
+            else:
+#                 order_list = [control1, control2, target]
+#                 orign_list = [control1, control2, target]
+#                 order_list.sort()
+                
+#                 index_order = [orign_list.index(order_list[0]),orign_list.index(order_list[1]),orign_list.index(order_list[2]) ]
+#                 print("index_order",index_order)
+                predecessors = list(dag.quantum_predecessors(node))
+                successors = list(dag.quantum_successors(node))
+                blocks = self.property_set["block_list"]
+                #the variant_tag specifies the gate decomposition. ['predecessor', 'successor', 'linear/fullyconnected', 'heavy on predecessor/successor'] First, check all the predecessors and specify the first tag based on the predecessors. Then traverse the successors and specify the second tag 'successor'. The 'linear/fullyconnected' are specified based on the physical qubit connectivity. The last tag 'heavy' is specified while checking both predecessor. The tags are based on the order of the first CNOT gate. For example, '01' means the first cnot gate's control qubit is 0 and target qubit is 1. The initial value is '00'.
+                #first we need to consider the successors to identify the gate cancellation with inversed gates
+                two_qubit_block = []
+                for successor in successors:
+                    #print(successor.name)
+                    if successor.name in {'ccx'}:
+                        variant_tag, variant_tag_succ = UnrollToffoliContextAware_.specify_variant_succ_ccx_tag(dag, variant_tag, variant_tag_succ, node, successor)
+                        print("calculated tags", variant_tag, variant_tag_succ)
+                        if variant_tag_succ[0:2] != ['00','00']:
+                            #the variant_tag_succ has been specified, add the successor to the substituted nodes
+                            substituted_nodes.append(successor)
+                            substituted_tags.append(variant_tag_succ)
+#                             variant_dag_succ = UnrollToffoliContextAware_.get_Toffoli_variant_dag(CCX_Variant_Gate, variant_tag=tuple(variant_tag_succ))
+#                             dag.substitute_node_with_dag(successor, variant_dag_succ)
+                            variant_tag_succ = ['00','00','f','p']
+                            break
+                    if successor.name in {'cx', 'swap'}:
+                        variant_tag = UnrollToffoliContextAware_.specify_variant_succ_cx_tag(dag, variant_tag, node, successor)
+                    #search for two qubit blocks:
+                    for block in blocks:
+                        if successor in block:
+                            suc_index = successors.index(successor)
+                            if suc_index != len(successors) - 1: #if it's not the last one
+                                for successor2 in successors[suc_index + 1:]:
+                                    if successor2 in block:
+                                        two_qubit_block = [successor, successor2]
+                                        break
+                    if len(two_qubit_block) != 0:
+                        print("identified two_qubit block for successor")
+                        print(successor.qargs, successor2.qargs)
+                        intersect = [value for value in node.qargs if value in successor.qargs or value in successor2.qargs]
+                        variant_tag[1] = str(node.qargs.index(intersect[0])) + str(node.qargs.index(intersect[1]))
+                        variant_tag[-1] = 's'
+                        two_qubit_block = []
+                two_qubit_block = []
+
+
+                for predecessor in predecessors:
+                    if predecessor.name in {'cx', 'swap'}:
+                        variant_tag = UnrollToffoliContextAware_.specify_variant_pre_cx_tag(dag, variant_tag, node, predecessor)
+                        
+                    #search for two qubit blocks:
+                    for block in blocks:
+                        if predecessor in block:
+                            pre_index = predecessors.index(predecessor)
+                            if pre_index != len(predecessors) - 1: #if it's not the last one
+                                for predecessor2 in predecessors[pre_index + 1:]:
+                                    if predecessor2 in block:
+                                        two_qubit_block = [predecessor, predecessor2]
+                                        break
+                    if len(two_qubit_block) != 0:
+                        print("identified two_qubit block for predecessor")
+                        print(predecessor.qargs, predecessor2.qargs)
+                        intersect = [value for value in node.qargs if value in predecessor.qargs or value in predecessor2.qargs]
+                        variant_tag[0] = str(node.qargs.index(intersect[0])) + str(node.qargs.index(intersect[1]))
+                        variant_tag[-1] = 'p'
+                        two_qubit_block = []
+               
+                
+                variant_dag = UnrollToffoliContextAware_.get_Toffoli_variant_dag(CCX_Variant_Gate, variant_tag=tuple(variant_tag),index_order = [0,1,2])
+                return_val = dag.substitute_node_with_dag(node, variant_dag)
 
         return dag
     @staticmethod
-    def specify_variant_tag(dag, variant_tag, variant_tag_succ, node, successor):
+    def specify_variant_pre_cx_tag(dag, variant_tag, node, predecessor):
+        intersect = [value for value in node.qargs if value in predecessor.qargs]
+        # check length
+        if len(intersect) == 2:
+            cond1 = dag.next_node_on_wire(node=predecessor, wire = intersect[0]) is node
+            cond2 = dag.next_node_on_wire(node=predecessor, wire = intersect[1]) is node
+            print("predecessor {} two intersection conditions:{}{}".format(predecessor.name, cond1, cond2))
+            #make sure there is no gate between the intersection qargs.
+            if cond1 and cond2:
+                variant_tag[0] = str(node.qargs.index(intersect[0])) + str(node.qargs.index(intersect[1]))
+                #don't need to set the last tag since it's already been set to 'p'
+        return variant_tag
+    @staticmethod
+    def specify_variant_succ_cx_tag(dag, variant_tag, node, successor, last_tag = 's'):
+        intersect = [value for value in node.qargs if value in successor.qargs]
+        # check length
+        if len(intersect) == 2:
+            cond1 = dag.next_node_on_wire(node=node, wire = intersect[0]) is successor
+            cond2 = dag.next_node_on_wire(node=node, wire = intersect[1]) is successor
+            print("successor {} two intersection conditions:{}{}".format(successor.name, cond1, cond2))
+            #make sure there is no gate between the intersection qargs.
+            if cond1 and cond2:
+                variant_tag[1] = str(node.qargs.index(intersect[0])) + str(node.qargs.index(intersect[1]))
+                #set the tag to 's' since it can be cancelled with the successor
+                variant_tag[-1] = last_tag
+        return variant_tag
+
+#     @staticmethod
+#     def specify_variant_succ_tag(dag, variant_tag):
+#         #search for two qubit blocks:
+#         for block in blocks:
+#             if successor in block:
+#                 suc_index = successors.index(successor)
+#                 if suc_index != len(successors) - 1: #if it's not the last one
+#                     for successor2 in successors[suc_index + 1:]:
+#                         if successor2 in block:
+#                             two_qubit_block = [successor, successor2]
+#                             break
+#         if len(two_qubit_block) != 0:
+#             print("identified two_qubit block for successor")
+#             print(successor.qargs, successor2.qargs)
+#             intersect = [value for value in node.qargs if value in successor.qargs or value in successor2.qargs]
+#             variant_tag[1] = str(node.qargs.index(intersect[0])) + str(node.qargs.index(intersect[1]))
+#             variant_tag[-1] = 's'
+#             two_qubit_block = []
+#         return variant_tag
+    
+    @staticmethod
+    def specify_variant_succ_ccx_tag(dag, variant_tag, variant_tag_succ, node, successor, last_tag = 's'):
         intersect = [value for value in node.qargs if value in successor.qargs]
         # check length
         if len(intersect) == 2:
@@ -177,10 +307,11 @@ class UnrollToffoliContextAware_(TransformationPass):
             if cond1 and cond2:
                 variant_tag[1] = str(node.qargs.index(intersect[0])) + str(node.qargs.index(intersect[1]))
                 #set the tag to 's' since it can be cancelled with the successor
-                variant_tag[-1] = 's'
+                variant_tag[-1] = last_tag
                 variant_tag_succ[0] = str(successor.qargs.index(intersect[0])) + str(successor.qargs.index(intersect[1]))
+                #variant_tag_succ[1] = 
                 variant_tag_succ[-1] = 'p'
-            return variant_tag, variant_tag_succ
+                return variant_tag, variant_tag_succ
         elif len(intersect) == 3:
             #make sure there is only one gate in between
             cond1 = dag.next_node_on_wire(node=node, wire = intersect[0]) is successor
@@ -193,7 +324,7 @@ class UnrollToffoliContextAware_(TransformationPass):
                     #All true TTT or first two conditions are true: TTF
                     variant_tag[1] = str(node.qargs.index(intersect[0])) + str(node.qargs.index(intersect[1]))
                     #set the tag to 's' since it can be cancelled with the successor
-                    variant_tag[-1] = 's'
+                    variant_tag[-1] = last_tag
                     variant_tag_succ[0] = str(successor.qargs.index(intersect[0])) + str(successor.qargs.index(intersect[1]))
                     variant_tag_succ[-1] = 'p'
                 else:
@@ -201,7 +332,7 @@ class UnrollToffoliContextAware_(TransformationPass):
                     if cond3 is True:
                         variant_tag[1] = str(node.qargs.index(intersect[0])) + str(node.qargs.index(intersect[2]))
                         #set the tag to 's' since it can be cancelled with the successor
-                        variant_tag[-1] = 's'
+                        variant_tag[-1] = last_tag
                         variant_tag_succ[0] = str(successor.qargs.index(intersect[0])) + str(successor.qargs.index(intersect[2]))
                         variant_tag_succ[-1] = 'p'
             else:
@@ -209,20 +340,20 @@ class UnrollToffoliContextAware_(TransformationPass):
                 if cond2 is True and cond3 is True:
                     variant_tag[1] = str(node.qargs.index(intersect[1])) + str(node.qargs.index(intersect[2]))
                     #set the tag to 's' since it can be cancelled with the successor
-                    variant_tag[-1] = 's'
+                    variant_tag[-1] = last_tag
                     variant_tag_succ[0] = str(successor.qargs.index(intersect[1])) + str(successor.qargs.index(intersect[2]))
                     variant_tag_succ[-1] = 'p'
         return variant_tag, variant_tag_succ
     
-    @staticmethod
-    def check_order(node_orign, node_context):
-        """check the index of the context gate's physical qubits"""
-        #JLTODO:add the assertion for number of qargs.
-        index_str = ""
-        for qarg in node_context.qargs:
-            index_str += str(node_orign.qargs.index(qarg))
-        print(index_str)
-        return index_str
+#     @staticmethod
+#     def check_order(node_orign, node_context):
+#         """check the index of the context gate's physical qubits"""
+#         #JLTODO:add the assertion for number of qargs.
+#         index_str = ""
+#         for qarg in node_context.qargs:
+#             index_str += str(node_orign.qargs.index(qarg))
+#         print(index_str)
+#         return index_str
     
     @staticmethod
     def get_Toffoli_variant_dag(variant_gate, variant_tag, index_order = [0,1,2]):
@@ -265,6 +396,160 @@ class UnrollCnotContextAware_(TransformationPass):
         current_layout = trivial_layout.copy()
             
         orientation_map = self.orientation_map
+        substituted_nodes = []
+        for node in dag.two_qubit_ops():
+            assert node.op.name == 'cx'
+            if node in substituted_nodes:
+                pass
+            else:
+                if node.op.name == 'cx':
+                    #print((node.qargs[0].index, node.qargs[1].index), orientation_map[(node.qargs[0].index, node.qargs[1].index)])
+                    #converting the datatype 'qubit' to the datatype 'int'
+                    control = current_layout[node.qargs[0]]
+                    target = current_layout[node.qargs[1]]
+                    #set the orientation based on the orientation map
+                    orientation = orientation_map[(control, target)]
+                    predecessors = list(dag.quantum_predecessors(node))
+                    successors = list(dag.quantum_successors(node))
+                    flag = True
+                    for successor in successors:
+                        if successor.name in {'cx'}:
+                            intersect = [value for value in node.qargs if value in successor.qargs]
+                            print("intersect", intersect)
+                            # check length
+                            if len(intersect) == 2:
+                                #these two CNOTs apply to the same qubits, first check the direction of the link. Then check if two CNOTs have the same controll qubit.
+                                #TODOJL: need to identify the case with single-qubit gates in between
+                                control_succ = current_layout[successor.qargs[0]]
+                                target_succ = current_layout[successor.qargs[1]]
+                                orientation_succ = orientation_map[(control_succ, target_succ)]
+                                #these two CNOTs have the same direction or different direction we just need to set the orientation accordingly
+                                variant_tag = ['00', '11'] + [orientation]
+                                variant_tag_succ = ['11', '00'] + [orientation_succ]
+                                variant_dag = UnrollCnotContextAware_.get_CNOT_variant_dag(variant_tag = tuple(variant_tag))
+                                dag.substitute_node_with_dag(node, variant_dag)  
+                                variant_dag_succ = UnrollCnotContextAware_.get_CNOT_variant_dag(variant_tag = tuple(variant_tag_succ))                   
+                                dag.substitute_node_with_dag(successor, variant_dag_succ)
+                                substituted_nodes.append(successor)
+                                substituted_nodes.append(node)
+                                flag = False
+                                break
+                    if flag == True:
+                        #the CNOT has not been decomposed
+
+                        variant_tag = ['11', '00', 'f']
+                        if orientation == 'b':
+                            variant_tag = ['00', '11', 'b']
+                        variant_dag = UnrollCnotContextAware_.get_CNOT_variant_dag(variant_tag = tuple(variant_tag))
+                        dag.substitute_node_with_dag(node, variant_dag)
+        return dag
+    
+    
+    
+    @staticmethod
+    def get_CNOT_variant_dag(variant_tag = ('00', '11', 'd'), index_order = [0,1]):
+        
+        q = QuantumRegister(2, "q")
+        qc = QuantumCircuit(q)
+        
+        try:
+            rules = UnrollCnotContextAware_.get_rules(q, variant_tag)
+        except:
+            raise AttributeError(f"Variant_tag({variant_tag})not defined")
+
+        for instr, qargs, cargs in rules:
+            qc._append(instr, qargs, cargs)
+        new_dag = circuit_to_dag(qc)
+        return new_dag
+
+    @staticmethod
+    def get_rules(q, variant_tag):
+        print(variant_tag)
+        variant_rules = {
+            ('00', '11', 'f'): [
+                (qiskit_superstaq.AceCR("+-"), [q[0], q[1]], []),
+                (RYGate(np.pi), [q[0]], []),
+                (RXGate(-np.pi/2), [q[1]], []),
+                (RZGate(-np.pi/2), [q[0]], []),
+            ],
+            ('11', '00', 'f'): [
+                (RZGate(np.pi/2), [q[0]], []),
+                (RYGate(np.pi), [q[0]], []),
+                (RXGate(np.pi/2), [q[1]], []),
+                (qiskit_superstaq.AceCR("+-"), [q[0], q[1]], []),
+            ],
+            ('01', '10', 'f'): [
+                (RZGate(np.pi/2), [q[0]], []),
+                (RXGate(np.pi/2), [q[1]], []),
+                (qiskit_superstaq.AceCR("-+"), [q[0], q[1]], []),
+                (RXGate(np.pi), [q[0]], []),
+            ],
+            ('10', '01', 'f'): [
+                (RXGate(np.pi/2), [q[0]], []),
+                (qiskit_superstaq.AceCR("-+"), [q[0], q[1]], []),
+                (RXGate(-np.pi/2), [q[1]], []),
+                (RZGate(-np.pi/2), [q[0]], []),
+            ],
+            
+            
+            
+            ('00', '11', 'b'): [
+                (RZGate(np.pi), [q[0]], []),
+                (RYGate(np.pi/2), [q[0]], []),
+                (RZGate(np.pi/2), [q[1]], []),
+                (RXGate(np.pi/2), [q[1]], []),
+                (qiskit_superstaq.AceCR("+-"), [q[1], q[0]], []),
+                (RZGate(np.pi/2), [q[0]], []),
+                (RXGate(np.pi/2), [q[0]], []),
+                (RYGate(-np.pi/2), [q[1]], []),
+            ],
+            ('11', '00', 'b'): [
+                (RYGate(np.pi/2), [q[1]], []),
+                (RXGate(-np.pi/2), [q[0]], []),
+                (RZGate(-np.pi/2), [q[0]], []),
+                (qiskit_superstaq.AceCR("+-"), [q[1], q[0]], []),
+                (RXGate(-np.pi/2), [q[1]], []),
+                (RZGate(-np.pi/2), [q[1]], []),
+                (RYGate(-np.pi/2), [q[0]], []),
+                (RZGate(-np.pi), [q[0]], []),
+            ],
+            
+          
+            }
+        return variant_rules[variant_tag]
+    
+    
+class UnrollCnot_(TransformationPass):
+    """Recursively expands all toffoli gates until the circuit only contains 2q or 1q gates."""
+
+    def __init__(self, coupling_map, orientation_map):
+        '''
+        Initialize the UnrollToffoli pass. This pass does a layout aware decomposition of the toffoli
+        gate. If all three qubits of the toffoli are mapped to each other, we do a 6 qubit decomposition
+        else we do an eight qubit decomposition.
+
+        Args:
+            coupling_map(CouplingMap) : directed graph representing a coupling map
+        '''
+        super().__init__()
+        self.coupling_map = coupling_map
+        self.orientation_map = orientation_map
+
+    def run(self, dag):
+        """Run the UnrollCnotContextAware_ pass on `dag`.
+
+        Args:
+            dag(DAGCircuit): input dag
+        Returns:
+            DAGCircuit: output dag with CNOT gate different designs
+        Raises:
+            QiskitError: 
+        """
+        canonical_register = dag.qregs["q"]
+        trivial_layout = Layout.generate_trivial_layout(canonical_register)
+        current_layout = trivial_layout.copy()
+            
+        orientation_map = self.orientation_map
         for node in dag.two_qubit_ops():
             assert node.op.name == 'cx'
 
@@ -277,26 +562,11 @@ class UnrollCnotContextAware_(TransformationPass):
                 target = current_layout[node.qargs[1]]
                 #set the orientation based on the orientation map
                 orientation = orientation_map[(control, target)]
-                predecessors = list(dag.quantum_predecessors(node))
-                successors = list(dag.quantum_successors(node))
-                for successor in successors:
-                    if successor.name in {'cx'}:
-                        intersect = [value for value in node.qargs if value in successor.qargs]
-                        print("intersect", intersect)
-                        # check length
-                        if len(intersect) == 2:
-                            #these two CNOTs apply to the same qubits, first check the direction of the link. Then check if two CNOTs have the same controll qubit.
-                            #TODOJL: need to identify the case with single-qubit gates in between
-                            control_succ = current_layout[successor.qargs[0]]
-                            target_succ = current_layout[successor.qargs[1]]
-                            orientation_succ = orientation_map[(control_succ, target_succ)]
-                            #these two CNOTs have the same direction or different direction we just need to set the orientation accordingly
-                            variant_tag = ['00', '11'] + [orientation]
-                            variant_tag_succ = ['11', '00'] + [orientation_succ]
-                            variant_dag = UnrollCnotContextAware_.get_CNOT_variant_dag(variant_tag = tuple(variant_tag))
-                            dag.substitute_node_with_dag(node, variant_dag)  
-                            variant_dag_succ = UnrollCnotContextAware_.get_CNOT_variant_dag(variant_tag = tuple(variant_tag_succ))                   
-                            dag.substitute_node_with_dag(successor, variant_dag_succ)
+                variant_tag = ['11', '00'] + [orientation]
+                if orientation == 'b':
+                    variant_tag = ['00', '11', 'b']
+                variant_dag = UnrollCnot_.get_CNOT_variant_dag(variant_tag = tuple(variant_tag))
+                dag.substitute_node_with_dag(node, variant_dag)
         return dag
     
     

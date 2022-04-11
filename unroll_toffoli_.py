@@ -90,8 +90,8 @@ class UnrollToffoli_(TransformationPass):
                 #print('distance between control 2 and target: ', d2)
                 #print('distance between control 1 and target: ', d3)
 
-                # print('The physical qubits for the toffoli are: ', control1, control2, target)
-                # print('The required toffoli will be decomposed using a 6 cnot decomposition')
+                print('The physical qubits for the toffoli are: ', control1, control2, target)
+                print('The required toffoli will be decomposed using a 6 cnot decomposition')
 
                 #create a 6 cnot circuit
                 #print('6 cnot toffoli: ', control1, control2, target)
@@ -118,8 +118,8 @@ class UnrollToffoli_(TransformationPass):
             #if physical qubit 1 is connected to both but zero and two are not connected
             elif bool1 and bool2 and (not bool3):
 
-                # print('The physical qubits for the toffoli are: ', control1, control2, target)
-                # print('The required toffoli will be decomposed using an 8 cnot decomposition - one in center')
+                print('The physical qubits for the toffoli are: ', control1, control2, target)
+                print('The required toffoli will be decomposed using an 8 cnot decomposition - one in center')
 
                 #create an 8 cnot circuit
                 #print('Case 1: ', control1, control2, target)
@@ -150,8 +150,8 @@ class UnrollToffoli_(TransformationPass):
             #if physical qubit 0 is connected to both but one and two are not connected
             elif bool1 and (not bool2) and bool3:
 
-                # print('The physical qubits for the toffoli are: ', control1, control2, target)
-                # print('The required toffoli will be decomposed using an 8 cnot decomposition - zero in center')
+                print('The physical qubits for the toffoli are: ', control1, control2, target)
+                print('The required toffoli will be decomposed using an 8 cnot decomposition - zero in center')
 
                 #create an 8 cnot circuit
                 #print('Case 2: ', control1, control2, target)
@@ -181,8 +181,8 @@ class UnrollToffoli_(TransformationPass):
             #if physical qubit 2 is connected to both but 0 and 1 are not connected
             elif (not bool1) and bool2 and bool3:
 
-                # print('The physical qubits for the toffoli are: ', control1, control2, target)
-                # print('The required toffoli will be decomposed using an 8 cnot decomposition - two in center')
+                print('The physical qubits for the toffoli are: ', control1, control2, target)
+                print('The required toffoli will be decomposed using an 8 cnot decomposition - two in center')
 
                 #create a 8 cnot circuit
                 #print('Case 3: ', control1, control2, target)

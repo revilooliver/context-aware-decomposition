@@ -1,4 +1,5 @@
 #define different Toffoli variants. There should be 9 combinations. The canonical ccx is CCX_12_01
+import numpy
 from typing import Optional, Union
 from qiskit.circuit.quantumregister import QuantumRegister
 from qiskit.circuit.gate import Gate
@@ -72,7 +73,7 @@ class CCX_Variant_Gate(ControlledGate):
         super().__init__(
             "ccx_variant", 3, [], num_ctrl_qubits=2, label=label, ctrl_state=ctrl_state, base_gate=XGate()
         )
-        print(variant_tag)
+        print("initialized variant_tag:", variant_tag)
         self.variant_tag = variant_tag
         #self._define_variant(variant_tag)
 
@@ -119,78 +120,6 @@ class CCX_Variant_Gate(ControlledGate):
         # 10, 21, s
         # 21, 10, p
         variant_rules = {
-            ('01', '01', 'f', 's'): [
-                (HGate(), [q[2]], []),
-                (TGate(), [q[1]], []),
-                (TGate(), [q[0]], []),
-                (TGate(), [q[2]], []),
-                (CXGate(), [q[0], q[1]], []),
-                (CXGate(), [q[2], q[0]], []),
-                (CXGate(), [q[1], q[2]], []),
-                (TdgGate(), [q[0]], []),
-                (CXGate(), [q[1], q[0]], []),
-                (TdgGate(), [q[1]], []),
-                (TdgGate(), [q[0]], []),
-                (TGate(), [q[2]], []),
-                (CXGate(), [q[2], q[0]], []),
-                (CXGate(), [q[1], q[2]], []),
-                (CXGate(), [q[0], q[1]], []),
-                (HGate(), [q[2]], []),
-            ],
-            ('10', '10', 'f', 's'): [
-                (HGate(), [q[2]], []),
-                (TGate(), [q[0]], []),
-                (TGate(), [q[1]], []),
-                (TGate(), [q[2]], []),
-                (CXGate(), [q[1], q[0]], []),
-                (CXGate(), [q[2], q[1]], []),
-                (CXGate(), [q[0], q[2]], []),
-                (TdgGate(), [q[1]], []),
-                (CXGate(), [q[0], q[1]], []),
-                (TdgGate(), [q[0]], []),
-                (TdgGate(), [q[1]], []),
-                (TGate(), [q[2]], []),
-                (CXGate(), [q[2], q[1]], []),
-                (CXGate(), [q[0], q[2]], []),
-                (CXGate(), [q[1], q[0]], []),
-                (HGate(), [q[2]], []),
-            ],
-            ('10', '10', 'f', 'p'): [
-                (HGate(), [q[2]], []),
-                (CXGate(), [q[1], q[0]], []),
-                (CXGate(), [q[0], q[2]], []),
-                (CXGate(), [q[2], q[1]], []),
-                (TdgGate(), [q[2]], []),
-                (TGate(), [q[1]], []),
-                (TGate(), [q[0]], []),
-                (CXGate(), [q[0], q[1]], []),
-                (TGate(), [q[1]], []),
-                (CXGate(), [q[0], q[2]], []),
-                (CXGate(), [q[2], q[1]], []),
-                (CXGate(), [q[1], q[0]], []),
-                (TdgGate(), [q[0]], []),
-                (TdgGate(), [q[1]], []),
-                (TdgGate(), [q[2]], []),
-                (HGate(), [q[2]], []),
-            ],
-            ('01', '01', 'f', 'p'): [
-                (HGate(), [q[2]], []),
-                (CXGate(), [q[0], q[1]], []),
-                (CXGate(), [q[1], q[2]], []),
-                (CXGate(), [q[2], q[0]], []),
-                (TdgGate(), [q[2]], []),
-                (TGate(), [q[0]], []),
-                (TGate(), [q[1]], []),
-                (CXGate(), [q[1], q[0]], []),
-                (TGate(), [q[0]], []),
-                (CXGate(), [q[1], q[2]], []),
-                (CXGate(), [q[2], q[0]], []),
-                (CXGate(), [q[0], q[1]], []),
-                (TdgGate(), [q[1]], []),
-                (TdgGate(), [q[0]], []),
-                (TdgGate(), [q[2]], []),
-                (HGate(), [q[2]], []),
-            ],
             ('10', '02', 'f', 'p'): [
                 (CXGate(), [q[1], q[0]], []),
                 (TdgGate(), [q[1]], []),
@@ -303,7 +232,7 @@ class CCX_Variant_Gate(ControlledGate):
                 (TdgGate(), [q[0]], []),
                 (CXGate(), [q[2], q[0]], []),
                 (TGate(), [q[1]], []),
-                (TGate(), [q[0]], []),
+                (TGate(), [q[1]], []),
                 (CXGate(), [q[2], q[1]], []),
                 (TGate(), [q[2]], []),
                 (TdgGate(), [q[1]], []),
@@ -325,6 +254,78 @@ class CCX_Variant_Gate(ControlledGate):
                 (CXGate(), [q[2], q[0]], []),
                 (TGate(), [q[0]], []),
                 (CXGate(), [q[1], q[0]], []),
+                (HGate(), [q[2]], []),
+            ],
+            ('01', '01', 'f', 's'): [
+                (HGate(), [q[2]], []),
+                (TGate(), [q[1]], []),
+                (TGate(), [q[0]], []),
+                (TGate(), [q[2]], []),
+                (CXGate(), [q[0], q[1]], []),
+                (CXGate(), [q[2], q[0]], []),
+                (CXGate(), [q[1], q[2]], []),
+                (TdgGate(), [q[0]], []),
+                (CXGate(), [q[1], q[0]], []),
+                (TdgGate(), [q[1]], []),
+                (TdgGate(), [q[0]], []),
+                (TGate(), [q[2]], []),
+                (CXGate(), [q[2], q[0]], []),
+                (CXGate(), [q[1], q[2]], []),
+                (CXGate(), [q[0], q[1]], []),
+                (HGate(), [q[2]], []),
+            ],
+            ('10', '10', 'f', 's'): [
+                (HGate(), [q[2]], []),
+                (TGate(), [q[0]], []),
+                (TGate(), [q[1]], []),
+                (TGate(), [q[2]], []),
+                (CXGate(), [q[1], q[0]], []),
+                (CXGate(), [q[2], q[1]], []),
+                (CXGate(), [q[0], q[2]], []),
+                (TdgGate(), [q[1]], []),
+                (CXGate(), [q[0], q[1]], []),
+                (TdgGate(), [q[0]], []),
+                (TdgGate(), [q[1]], []),
+                (TGate(), [q[2]], []),
+                (CXGate(), [q[2], q[1]], []),
+                (CXGate(), [q[0], q[2]], []),
+                (CXGate(), [q[1], q[0]], []),
+                (HGate(), [q[2]], []),
+            ],
+            ('10', '10', 'f', 'p'): [
+                (HGate(), [q[2]], []),
+                (CXGate(), [q[1], q[0]], []),
+                (CXGate(), [q[0], q[2]], []),
+                (CXGate(), [q[2], q[1]], []),
+                (TdgGate(), [q[2]], []),
+                (TGate(), [q[1]], []),
+                (TGate(), [q[0]], []),
+                (CXGate(), [q[0], q[1]], []),
+                (TGate(), [q[1]], []),
+                (CXGate(), [q[0], q[2]], []),
+                (CXGate(), [q[2], q[1]], []),
+                (CXGate(), [q[1], q[0]], []),
+                (TdgGate(), [q[0]], []),
+                (TdgGate(), [q[1]], []),
+                (TdgGate(), [q[2]], []),
+                (HGate(), [q[2]], []),
+            ],
+            ('01', '01', 'f', 'p'): [
+                (HGate(), [q[2]], []),
+                (CXGate(), [q[0], q[1]], []),
+                (CXGate(), [q[1], q[2]], []),
+                (CXGate(), [q[2], q[0]], []),
+                (TdgGate(), [q[2]], []),
+                (TGate(), [q[0]], []),
+                (TGate(), [q[1]], []),
+                (CXGate(), [q[1], q[0]], []),
+                (TGate(), [q[0]], []),
+                (CXGate(), [q[1], q[2]], []),
+                (CXGate(), [q[2], q[0]], []),
+                (CXGate(), [q[0], q[1]], []),
+                (TdgGate(), [q[1]], []),
+                (TdgGate(), [q[0]], []),
+                (TdgGate(), [q[2]], []),
                 (HGate(), [q[2]], []),
             ],
             ('10', '02', 'l0', 'p'): [
@@ -405,119 +406,194 @@ class CCX_Variant_Gate(ControlledGate):
             ],
             ('02', '21', 'l2', 'p'): [
                 (HGate(), [q[2]], []),
-                (CXGate(), [q[1], q[2]], []),
                 (TGate(), [q[2]], []),
-                (CXGate(), [q[0], q[1]], []),
-                (CXGate(), [q[1], q[2]], []),
                 (TGate(), [q[1]], []),
-                (TGate(), [q[2]], []),
-                (CXGate(), [q[0], q[1]], []),
-                (CXGate(), [q[1], q[2]], []),
-                (TdgGate(), [q[2]], []),
-                (CXGate(), [q[0], q[1]], []),
-                (CXGate(), [q[1], q[2]], []),
-                (CXGate(), [q[0], q[1]], []),
-                (TdgGate(), [q[0]], []),
+                (TGate(), [q[0]], []),
+                (CXGate(), [q[0], q[2]], []),
+                (CXGate(), [q[2], q[1]], []),
+                (CXGate(), [q[0], q[2]], []),
+                (TGate(), [q[1]], []),
+                (CXGate(), [q[2], q[1]], []),
+                (CXGate(), [q[0], q[2]], []),
                 (TdgGate(), [q[1]], []),
                 (TdgGate(), [q[2]], []),
+                (CXGate(), [q[2], q[1]], []),
+                (CXGate(), [q[0], q[2]], []),
+                (TdgGate(), [q[1]], []),
+                (CXGate(), [q[2], q[1]], []),
                 (HGate(), [q[2]], []),
             ],
             ('21', '02', 'l2', 's'): [
                 (HGate(), [q[2]], []),
+                (CXGate(), [q[2], q[1]], []),
+                (TGate(), [q[1]], []),
+                (CXGate(), [q[0], q[2]], []),
+                (CXGate(), [q[2], q[1]], []),
                 (TGate(), [q[2]], []),
                 (TGate(), [q[1]], []),
-                (TGate(), [q[0]], []),
-                (CXGate(), [q[0], q[1]], []),
-                (CXGate(), [q[1], q[2]], []),
-                (CXGate(), [q[0], q[1]], []),
-                (TGate(), [q[2]], []),
-                (CXGate(), [q[1], q[2]], []),
-                (CXGate(), [q[0], q[1]], []),
-                (TdgGate(), [q[2]], []),
+                (CXGate(), [q[0], q[2]], []),
+                (CXGate(), [q[2], q[1]], []),
                 (TdgGate(), [q[1]], []),
-                (CXGate(), [q[1], q[2]], []),
-                (CXGate(), [q[0], q[1]], []),
+                (CXGate(), [q[0], q[2]], []),
+                (CXGate(), [q[2], q[1]], []),
+                (CXGate(), [q[0], q[2]], []),
+                (TdgGate(), [q[0]], []),
+                (TdgGate(), [q[1]], []),
                 (TdgGate(), [q[2]], []),
-                (CXGate(), [q[1], q[2]], []),
                 (HGate(), [q[2]], []),
             ],
             ('12', '20', 'l2', 'p'): [
                 (HGate(), [q[2]], []),
-                (CXGate(), [q[0], q[2]], []),
                 (TGate(), [q[2]], []),
-                (CXGate(), [q[1], q[0]], []),
-                (CXGate(), [q[0], q[2]], []),
+                (TGate(), [q[1]], []),
                 (TGate(), [q[0]], []),
-                (TGate(), [q[2]], []),
-                (CXGate(), [q[1], q[0]], []),
-                (CXGate(), [q[0], q[2]], []),
-                (TdgGate(), [q[2]], []),
-                (CXGate(), [q[1], q[0]], []),
-                (CXGate(), [q[0], q[2]], []),
-                (CXGate(), [q[1], q[0]], []),
-                (TdgGate(), [q[1]], []),
+                (CXGate(), [q[1], q[2]], []),
+                (CXGate(), [q[2], q[0]], []),
+                (CXGate(), [q[1], q[2]], []),
+                (TGate(), [q[0]], []),
+                (CXGate(), [q[2], q[0]], []),
+                (CXGate(), [q[1], q[2]], []),
                 (TdgGate(), [q[0]], []),
                 (TdgGate(), [q[2]], []),
+                (CXGate(), [q[2], q[0]], []),
+                (CXGate(), [q[1], q[2]], []),
+                (TdgGate(), [q[0]], []),
+                (CXGate(), [q[2], q[0]], []),
                 (HGate(), [q[2]], []),
             ],
             ('20', '12', 'l2', 's'): [
                 (HGate(), [q[2]], []),
+                (CXGate(), [q[2], q[0]], []),
+                (TGate(), [q[0]], []),
+                (CXGate(), [q[1], q[2]], []),
+                (CXGate(), [q[2], q[0]], []),
                 (TGate(), [q[2]], []),
                 (TGate(), [q[0]], []),
-                (TGate(), [q[1]], []),
-                (CXGate(), [q[1], q[0]], []),
-                (CXGate(), [q[0], q[2]], []),
-                (CXGate(), [q[1], q[0]], []),
-                (TGate(), [q[2]], []),
-                (CXGate(), [q[0], q[2]], []),
-                (CXGate(), [q[1], q[0]], []),
-                (TdgGate(), [q[2]], []),
+                (CXGate(), [q[1], q[2]], []),
+                (CXGate(), [q[2], q[0]], []),
                 (TdgGate(), [q[0]], []),
-                (CXGate(), [q[0], q[2]], []),
-                (CXGate(), [q[1], q[0]], []),
+                (CXGate(), [q[1], q[2]], []),
+                (CXGate(), [q[2], q[0]], []),
+                (CXGate(), [q[1], q[2]], []),
+                (TdgGate(), [q[0]], []),
+                (TdgGate(), [q[1]], []),
                 (TdgGate(), [q[2]], []),
-                (CXGate(), [q[0], q[2]], []),
                 (HGate(), [q[2]], []),
             ],
             }
         try:
+            print("look for variant_rules", variant_tag)
             return variant_rules[variant_tag]
         except:
             variant_tag = list(variant_tag)
-            #based on the last tag 's' or 'p', find the corresponding tag:
-            possible_tags = ['01', '10', '02', '20', '12', '21']
-            if variant_tag[-1] == 's':
-                #specify the successor tag first
-                #move the same tags to the end
-                possible_tags.append(possible_tags.pop(possible_tags.index(variant_tag[1])))
-                possible_tags.append(possible_tags.pop(possible_tags.index(variant_tag[1][::-1])))
-                for tag in possible_tags:
-                    new_tag = tuple([tag] + variant_tag[1:])
-                    if new_tag in variant_rules.keys():
-                        return variant_rules[new_tag]
-                    new_tag_inverse = tuple([tag] + [variant_tag[1][::-1]] + variant_tag[2:])
-                    print(new_tag_inverse in variant_rules.keys())
-                    if new_tag_inverse in variant_rules.keys():
-                        return variant_rules[new_tag_inverse]
-            elif variant_tag[-1] == 'p':
-                #move the same tag to the end
-                possible_tags.append(possible_tags.pop(possible_tags.index(variant_tag[0])))
-                possible_tags.append(possible_tags.pop(possible_tags.index(variant_tag[0][::-1])))
-                #specify the predecessor tag first
-                for tag in possible_tags:
-                    new_tag = tuple([variant_tag[0]] + [tag] + variant_tag[2:])
-                    if new_tag in variant_rules.keys():
-                        return variant_rules[new_tag]
-                    new_tag_inverse = tuple([variant_tag[0][::-1]] + [tag] + variant_tag[2:])
-                    if new_tag_inverse in variant_rules.keys():
-                        return variant_rules[new_tag_inverse]
-            else:
-                raise AttributeError(f"Unexpcted tag value{variant_tag[-1]}")
+            pre_tag = variant_tag[0]
+            pre_tag_inv = variant_tag[0][::-1]
+            suc_tag = variant_tag[1]
+            suc_tag_inv = variant_tag[1][::-1]
+            two_match_tags = []
+            one_match_tags = []
+            for tag in variant_rules.keys():
+                if tag[-2] == variant_tag[-2]:
+                    if tag[0] == pre_tag or tag[0] == pre_tag_inv:
+                        if tag[1] == suc_tag or tag[1] == suc_tag_inv:
+                            if tag[-1] == variant_tag[-1]:
+                                #found three match tag, return the value
+                                print("final tag, three match", tag)
+                                return variant_rules[tuple(tag)]
+                            else:
+                                #found two match tag, record it
+                                two_match_tags.append(tag)
+                        else:
+                            #found one match tag, record it
+                            one_match_tags.append(tag)
+                    else:
+                        if tag[1] == suc_tag or tag[1] == suc_tag_inv:
+                            #found one match tag, record it
+                            one_match_tags.append(tag) 
+                else:
+                    #the topology flags are different, pass
+                    pass
+            if len(two_match_tags) != 0:
+                print("final tag, two match", two_match_tags[0])
+                return variant_rules[tuple(two_match_tags[0])]
+            elif len(one_match_tags) != 0:
+                print("final tag, one match", one_match_tags[0])
+                return variant_rules[tuple(one_match_tags[0])]
+                
+              
+            
+            
+            
+#             variant_tag = list(variant_tag)
+#             #based on the last tag 's' or 'p', find the corresponding tag:
+#             possible_tags = ['01', '10', '02', '20', '12', '21']
+#             if variant_tag[-1] == 's':
+#                 if variant_tag[1] == '00':
+#                     print("unexpected case")
+#                 else:
+#                     #specify the successor tag first
+#                     #move the same tags to the end
+#                     possible_tags.append(possible_tags.pop(possible_tags.index(variant_tag[1])))
+#                     possible_tags.append(possible_tags.pop(possible_tags.index(variant_tag[1][::-1])))
+#                     for tag in possible_tags:
+#                         new_tag = tuple([tag] + variant_tag[1:])
+#                         if new_tag in variant_rules.keys():
+#                             print("s new_tag", variant_tag, new_tag)
+#                             return variant_rules[new_tag]
+#                         new_tag_inverse = tuple([tag] + [variant_tag[1][::-1]] + variant_tag[2:])
+#     #                     print("inversed tag in rules:", new_tag_inverse in variant_rules.keys())
+#                         if new_tag_inverse in variant_rules.keys():
+#                             print("s new_tag_inverse", variant_tag, new_tag_inverse)
+#                             return variant_rules[new_tag_inverse]
+
+#             elif variant_tag[-1] == 'p':
+#                 if variant_tag[0] == '00':
+#                     if variant_tag[1] != '00':
+#                         possible_tags.append(possible_tags.pop(possible_tags.index(variant_tag[1])))
+#                         possible_tags.append(possible_tags.pop(possible_tags.index(variant_tag[1][::-1])))
+#                         for tag in possible_tags:
+#                             new_tag = tuple([tag] + variant_tag[1:])
+#                             if new_tag in variant_rules.keys():
+#                                 print("s new_tag", variant_tag, new_tag)
+#                                 return variant_rules[new_tag]
+#                             new_tag_inverse = tuple([tag] + [variant_tag[1][::-1]] + variant_tag[2:])
+#         #                     print("inversed tag in rules:", new_tag_inverse in variant_rules.keys())
+#                             if new_tag_inverse in variant_rules.keys():
+#                                 print("s new_tag_inverse", variant_tag, new_tag_inverse)
+#                                 return variant_rules[new_tag_inverse]
+#                     else:
+#                         pass 
+#                 else:
+#                     #move the same tag to the end
+#                     possible_tags.append(possible_tags.pop(possible_tags.index(variant_tag[0])))
+#                     possible_tags.append(possible_tags.pop(possible_tags.index(variant_tag[0][::-1])))
+#                     #specify the predecessor tag first
+#                     for tag in possible_tags:
+#                         new_tag = tuple([variant_tag[0]] + [tag] + variant_tag[2:])
+#                         if new_tag in variant_rules.keys():
+#                             print("p new_tag", new_tag)
+#                             return variant_rules[new_tag]
+#                         new_tag_inverse = tuple([variant_tag[0][::-1]] + [tag] + variant_tag[2:])
+#                         if new_tag_inverse in variant_rules.keys():
+#                             print("p new_tag_inverse", new_tag_inverse)
+#                             return variant_rules[new_tag_inverse]
+#             else:
+#                 raise AttributeError(f"Unexpcted tag value{variant_tag[-1]}")
+
         #if both of them are not found:
+        print("didn't find match tag")
         if variant_tag[-2] == 'f':
             return variant_rules[('01', '12', 'f', 'p')]
-        else:
-            return variant_rules[('01', '12', 'l', 'p')]
+        elif variant_tag[-2] == 'l0':
+            print("l0", variant_tag)
+            return variant_rules[('02', '10', 'l0', 's')]
+        elif variant_tag[-2] == 'l1':
+            print("l1", variant_tag)
+            return variant_rules[('01', '12', 'l1', 'p')]
+        elif variant_tag[-2] == 'l2':
+            print("l2", variant_tag)
+            return variant_rules[('12', '20', 'l2', 'p')]
+                                             
                                              
                 
 
