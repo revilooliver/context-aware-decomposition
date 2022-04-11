@@ -136,22 +136,22 @@ class UnrollToffoliContextAware_(TransformationPass):
             if node in substituted_nodes:
                 variant_tag = substituted_tags[substituted_nodes.index(node)]
                 variant_tag[-2] = variant_tag_succ[-2]
+                print("sub_tag before optimize", variant_tag)
                 
-                
-#                 successors = list(dag.quantum_successors(node))
-#                 blocks = self.property_set["block_list"]
-#                 two_qubit_block = []
-#                 for successor in successors:
-#                     if successor.name in {'ccx'}:
-#                         variant_tag, variant_tag_succ = UnrollToffoliContextAware_.specify_variant_succ_ccx_tag(dag, variant_tag, variant_tag_succ, node, successor, last_tag = 'p')
-#                         print("calculated tags for substituted", variant_tag, variant_tag_succ)
-#                         if variant_tag_succ[0:2] != ['00','00']:
-#                             #the variant_tag_succ has been specified, add the successor to the substituted nodes
-# #                             substituted_nodes.append(successor)
-# #                             substituted_tags.append(variant_tag_succ)
+                successors = list(dag.quantum_successors(node))
+                blocks = self.property_set["block_list"]
+                two_qubit_block = []
+                for successor in successors:
+                    if successor.name in {'ccx'}:
+                        variant_tag, variant_tag_succ = UnrollToffoliContextAware_.specify_variant_succ_ccx_tag(dag, variant_tag, variant_tag_succ, node, successor, last_tag = 'p')
+                        print("calculated tags for substituted", variant_tag, variant_tag_succ)
+                        if variant_tag_succ[0:2] != ['00','00']:
+                            #the variant_tag_succ has been specified, add the successor to the substituted nodes
+#                             substituted_nodes.append(successor)
+#                             substituted_tags.append(variant_tag_succ)
 
-#                             variant_tag_succ = ['00','00','f','p']
-#                             break
+                            variant_tag_succ = ['00','00','f','p']
+                            break
 #                     if successor.name in {'cx', 'swap'}:
 #                         variant_tag = UnrollToffoliContextAware_.specify_variant_succ_cx_tag(dag, variant_tag, node, successor, last_tag = 'p')
 #                     #search for two qubit blocks:
@@ -170,7 +170,7 @@ class UnrollToffoliContextAware_(TransformationPass):
 #                         variant_tag[1] = str(node.qargs.index(intersect[0])) + str(node.qargs.index(intersect[1]))
 #                         two_qubit_block = []
                         
-#                 print("the optimized substituted tag", variant_tag)
+                print("the optimized substituted tag", variant_tag)
                 variant_dag = UnrollToffoliContextAware_.get_Toffoli_variant_dag(CCX_Variant_Gate, variant_tag=tuple(variant_tag))
                 dag.substitute_node_with_dag(node, variant_dag)
                 pass
@@ -589,7 +589,6 @@ class UnrollCnot_(TransformationPass):
 
     @staticmethod
     def get_rules(q, variant_tag):
-        print(variant_tag)
         variant_rules = {
             ('00', '11', 'f'): [
                 (qiskit_superstaq.AceCR("+-"), [q[0], q[1]], []),
