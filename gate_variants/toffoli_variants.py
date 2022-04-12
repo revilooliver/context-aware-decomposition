@@ -494,7 +494,9 @@ class CCX_Variant_Gate(ControlledGate):
             one_match_tags = []
             for tag in variant_rules.keys():
                 if tag[-2] == variant_tag[-2]:
+                    #first guarantee the topology is correct
                     if tag[0] == pre_tag or tag[0] == pre_tag_inv:
+                        #if the first tag match
                         if tag[1] == suc_tag or tag[1] == suc_tag_inv:
                             if tag[-1] == variant_tag[-1]:
                                 #found three match tag, return the value

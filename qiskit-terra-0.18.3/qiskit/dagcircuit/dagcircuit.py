@@ -1164,6 +1164,7 @@ class DAGCircuit:
         self._multi_graph[node._node_id] = new_node
         return new_node
 
+
     def node(self, node_id):
         """Get the node in the dag.
 

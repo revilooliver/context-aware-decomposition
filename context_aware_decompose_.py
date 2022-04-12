@@ -28,6 +28,8 @@ import numpy as np
 
 from gate_variants.toffoli_variants import CCX_Variant_Gate
 from gate_variants.cx_variants import CX_Variant_Gate
+from gate_variants.bridge_variants import Bridge_Variant_Gate
+from gate_variants.swap_variants import SWAP_Variant_Gate
 import qiskit_superstaq
 
 
@@ -641,3 +643,136 @@ class UnrollCnot_(TransformationPass):
           
             }
         return variant_rules[variant_tag]
+    
+class SWAPContextAware_(TransformationPass):
+    """change SWAP to bridge gate and perform context-aware decompose"""
+
+    def __init__(self, coupling_map):
+        '''
+        Initialize the UnrollToffoli pass. This pass does a layout aware decomposition of the toffoli
+        gate. If all three qubits of the toffoli are mapped to each other, we do a 6 qubit decomposition
+        else we do an eight qubit decomposition.
+
+        Args:
+            coupling_map(CouplingMap) : directed graph representing a coupling map
+        '''
+        super().__init__()
+        self.coupling_map = coupling_map
+
+    def run(self, dag):
+        """Run the UnrollCnotContextAware_ pass on `dag`.
+
+        Args:
+            dag(DAGCircuit): input dag
+        Returns:
+            DAGCircuit: output dag with CNOT gate different designs
+        Raises:
+            QiskitError: 
+        """
+        canonical_register = dag.qregs["q"]
+        trivial_layout = Layout.generate_trivial_layout(canonical_register)
+        current_layout = trivial_layout.copy()
+            
+#        orientation_map = self.orientation_map
+        substituted_nodes = []
+        for node in dag.two_qubit_ops():
+            #assert node.op.name == 'cx'
+            if node in substituted_nodes:
+                pass
+            else:
+                if node.op.name == 'swap':
+                    predecessors = list(dag.quantum_predecessors(node))
+                    successors = list(dag.quantum_successors(node))
+                    flag = True
+                    for successor in successors:
+                        if successor.name in {'swap', 'cx'}:
+                            intersect = [value for value in node.qargs if value in successor.qargs]
+                            print("intersect", intersect)
+                            # check length
+                            if len(intersect) == 2:
+                                next_node_wire0 = dag.next_node_on_wire(node=node, wire = intersect[0])
+                                next_node_wire1 = dag.next_node_on_wire(node=node, wire = intersect[1])
+                                cond0 = next_node_wire0 is successor
+                                cond1 = next_node_wire1 is successor
+                                print("two intersection conditions", cond0, cond1)
+                                #make sure there is only one CX between the intersection qargs.
+                                if cond0 and next_node_wire1.op.name == 'cx' and dag.next_node_on_wire(node=next_node_wire1, wire = intersect[1]) is successor and next_node_wire1.qargs[0] == intersect[1]:
+                                    print("bridge Gate10")
+                                    dag.substitute_node(node, SWAP_Variant_Gate(variant_tag = ('10')))
+                                    dag.substitute_node(successor, SWAP_Variant_Gate(variant_tag = ('10')))
+                                    substituted_nodes += [node, successor]
+                                elif cond1 and next_node_wire0.op.name == 'cx' and dag.next_node_on_wire(node=next_node_wire0, wire = intersect[0]) is successor and next_node_wire1.qargs[0] == intersect[0]:
+                                    print("bridge Gate01")
+                                    dag.substitute_node(node, SWAP_Variant_Gate(variant_tag = ('01')))
+                                    dag.substitute_node(successor, SWAP_Variant_Gate(variant_tag = ('01')))
+                                    substituted_nodes += [node, successor]
+                                elif cond0 and cond1 and successor.name in {'cx'}:
+                                    if intersect[0] == successor.qargs[0]:
+                                        dag.substitute_node(node, SWAP_Variant_Gate(variant_tag = ('01')))
+                                        substituted_nodes += [node]
+                                    elif intersect[0] == successor.qargs[1]:
+                                        dag.substitute_node(node, SWAP_Variant_Gate(variant_tag = ('10')))
+                                        substituted_nodes += [node]
+                                    else:
+                                        raise AttributeError(f"incorrect qargs")
+                    if node in substituted_nodes:
+                        pass
+                    else:
+                        for predecessor in predecessors:
+                            if predecessor.name in {'cx'}:
+                                intersect = [value for value in node.qargs if value in predecessor.qargs]
+                                print("intersect", intersect)
+                                # check length
+                                if len(intersect) == 2:
+                                    next_node_wire0 = dag.next_node_on_wire(node=predecessor, wire = intersect[0])
+                                    next_node_wire1 = dag.next_node_on_wire(node=predecessor, wire = intersect[1])
+                                    cond0 = next_node_wire0 is node
+                                    cond1 = next_node_wire1 is node
+                                    print("two intersection conditions", cond0, cond1)
+                                    if cond0 and cond1:
+                                        if intersect[0] == predecessor.qargs[0]:
+                                            dag.substitute_node(node, SWAP_Variant_Gate(variant_tag = ('01')))
+                                            substituted_nodes += [node]
+                                        elif intersect[0] == predecessor.qargs[1]:
+                                            dag.substitute_node(node, SWAP_Variant_Gate(variant_tag = ('10')))
+                                            substituted_nodes += [node]
+                                        else:
+                                            raise AttributeError(f"incorrect qargs")
+                                    
+        return dag
+    
+    @staticmethod
+    def get_bridge_variant_dag(variant_tag = ('12', '01'), index_order = [0,1]):
+        
+        q = QuantumRegister(3, "q")
+        qc = QuantumCircuit(q)
+        
+        try:
+            rules = SWAPContextAware_.get_rules(q, variant_tag)
+        except:
+            raise AttributeError(f"Bridge Gate Variant_tag({variant_tag})not defined")
+
+        for instr, qargs, cargs in rules:
+            qc._append(instr, qargs, cargs)
+        new_dag = circuit_to_dag(qc)
+        return new_dag
+
+    @staticmethod
+    def get_rules(q, variant_tag):
+        variant_rules = {
+            ('12', '01'): [
+                (CXGate(), [q[1], q[2]], []),
+                (CXGate(), [q[0], q[1]], []),
+                (CXGate(), [q[1], q[2]], []),
+                (CXGate(), [q[0], q[1]], []),
+            ],
+            ('01', '12'): [
+                (CXGate(), [q[0], q[1]], []),
+                (CXGate(), [q[1], q[2]], []),
+                (CXGate(), [q[0], q[1]], []),
+                (CXGate(), [q[1], q[2]], []),
+            ],
+          
+            }
+        return variant_rules[variant_tag]
+    
